@@ -1,0 +1,384 @@
+{% extends 'cflows/cflows_base.html' %}
+
+{% block title %}Bookings - {{ work_item.title }} - CFlows{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <!-- Breadcrumb -->
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="flex items-center space-x-4">
+                <li>
+                    <a href="{% url 'cflows:index' %}" class="text-gray-400 hover:text-gray-500">
+                        <i class="fas fa-home"></i>
+                        <span class="sr-only">Home</span>
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mr-4"></i>
+                        <a href="{% url 'cflows:work_item_detail' work_item.id %}" class="text-sm font-medium text-gray-500 hover:text-gray-700">
+                            {{ work_item.title }}
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mr-4"></i>
+                        <span class="text-sm font-medium text-gray-900">All Bookings</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+        
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">All Bookings</h1>
+                <p class="mt-2 text-gray-600">
+                    Bookings for work item: <span class="font-semibold">{{ work_item.title }}</span>
+                </p>
+                <div class="mt-2 flex items-center space-x-4 text-sm text-gray-500">
+                    <span class="flex items-center">
+                        <i class="fas fa-project-diagram mr-1"></i>
+                        {{ work_item.workflow.name }}
+                    </span>
+                    <span class="flex items-center">
+                        <i class="fas fa-map-marker-alt mr-1"></i>
+                        {{ work_item.current_step.name }}
+                    </span>
+                    {% if work_item.current_assignee %}
+                        <span class="flex items-center">
+                            <i class="fas fa-user mr-1"></i>
+                            {{ work_item.current_assignee.user.get_full_name|default:work_item.current_assignee.user.username }}
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="flex space-x-3">
+                <a href="{% url 'cflows:create_booking_from_work_item' work_item.id %}" 
+                   class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Create Booking
+                </a>
+                <a href="{% url 'cflows:work_item_detail' work_item.id %}" 
+                   class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Work Item
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-users text-2xl text-blue-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">CFlows Bookings</h3>
+                    <p class="text-3xl font-bold text-blue-600">{{ cflows_bookings.count }}</p>
+                    <p class="text-sm text-gray-500">
+                        {{ cflows_bookings|length|add:0 }} total
+                        {% if cflows_bookings %}
+                            • {% for booking in cflows_bookings %}{% if booking.is_completed %}{{ forloop.counter0|add:1 }}{% endif %}{% endfor %} completed
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-calendar-alt text-2xl text-purple-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Scheduling Bookings</h3>
+                    <p class="text-3xl font-bold text-purple-600">{{ scheduling_bookings|length }}</p>
+                    <p class="text-sm text-gray-500">
+                        {{ scheduling_bookings|length }} total
+                        {% if scheduling_bookings %}
+                            • {% for booking in scheduling_bookings %}{% if booking.status == 'completed' %}{{ forloop.counter0|add:1 }}{% endif %}{% endfor %} completed
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-chart-pie text-2xl text-green-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Total Bookings</h3>
+                    <p class="text-3xl font-bold text-green-600">{{ cflows_bookings.count|add:scheduling_bookings|length }}</p>
+                    <p class="text-sm text-gray-500">Across both systems</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Navigation -->
+    <div class="bg-blue-50 rounded-lg p-6 mb-8 border border-blue-200">
+        <h3 class="text-lg font-semibold text-blue-900 mb-4">
+            <i class="fas fa-external-link-alt mr-2"></i>Quick Navigation
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <a href="{% url 'cflows:redirect_to_scheduling_bookings' work_item.id %}" 
+               class="flex items-center p-4 bg-white rounded-lg border border-blue-300 hover:bg-blue-50 transition-colors">
+                <div class="flex-shrink-0 mr-4">
+                    <i class="fas fa-calendar-check text-purple-600 text-xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-medium text-gray-900">View in Scheduling Service</h4>
+                    <p class="text-sm text-gray-600">See all scheduling bookings in the advanced scheduling interface</p>
+                </div>
+                <div class="ml-auto">
+                    <i class="fas fa-arrow-right text-gray-400"></i>
+                </div>
+            </a>
+            
+            <a href="/services/cflows/calendar/?work_item={{ work_item.id }}" 
+               class="flex items-center p-4 bg-white rounded-lg border border-blue-300 hover:bg-blue-50 transition-colors">
+                <div class="flex-shrink-0 mr-4">
+                    <i class="fas fa-calendar text-blue-600 text-xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-medium text-gray-900">View in CFlows Calendar</h4>
+                    <p class="text-sm text-gray-600">See CFlows bookings in the calendar view</p>
+                </div>
+                <div class="ml-auto">
+                    <i class="fas fa-arrow-right text-gray-400"></i>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- CFlows Bookings -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-900 flex items-center">
+                    <i class="fas fa-users mr-2 text-blue-600"></i>
+                    CFlows Bookings ({{ cflows_bookings.count }})
+                </h2>
+            </div>
+            
+            {% if cflows_bookings %}
+                <div class="divide-y divide-gray-200">
+                    {% for booking in cflows_bookings %}
+                        <div class="p-6">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <h3 class="text-base font-medium text-gray-900">{{ booking.title }}</h3>
+                                    {% if booking.description %}
+                                        <p class="text-sm text-gray-600 mt-1">{{ booking.description|truncatewords:15 }}</p>
+                                    {% endif %}
+                                    
+                                    <div class="mt-3 space-y-1 text-sm text-gray-500">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-users mr-2 w-4"></i>
+                                            {{ booking.team.name }}
+                                        </div>
+                                        <div class="flex items-center">
+                                            <i class="fas fa-clock mr-2 w-4"></i>
+                                            {{ booking.start_time|date:"M d, Y H:i" }} - {{ booking.end_time|date:"H:i" }}
+                                        </div>
+                                        {% if booking.job_type %}
+                                            <div class="flex items-center">
+                                                <i class="fas fa-briefcase mr-2 w-4"></i>
+                                                {{ booking.job_type.name }}
+                                            </div>
+                                        {% endif %}
+                                        <div class="flex items-center">
+                                            <i class="fas fa-user-friends mr-2 w-4"></i>
+                                            {{ booking.required_members }} member{{ booking.required_members|pluralize }}
+                                        </div>
+                                        {% if booking.booked_by %}
+                                            <div class="flex items-center">
+                                                <i class="fas fa-user-plus mr-2 w-4"></i>
+                                                Booked by {{ booking.booked_by.user.get_full_name|default:booking.booked_by.user.username }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="ml-4 flex flex-col items-end space-y-2">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                               {% if booking.is_completed %}bg-green-100 text-green-800{% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                                        {% if booking.is_completed %}Completed{% else %}Pending{% endif %}
+                                    </span>
+                                    
+                                    <div class="flex space-x-1">
+                                        <a href="/services/cflows/calendar/bookings/{{ booking.id }}/" 
+                                           class="text-blue-600 hover:text-blue-800 text-sm" 
+                                           title="View Details">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        {% if not booking.is_completed %}
+                                            <button onclick="completeBooking({{ booking.id }}, &quot;cflows&quot;)" 
+                                                    class="text-green-600 hover:text-green-800 text-sm" 
+                                                    title="Mark Complete">
+                                                <i class="fas fa-check"></i>
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="p-6 text-center text-gray-500">
+                    <i class="fas fa-calendar-times text-3xl mb-4"></i>
+                    <p class="text-sm">No CFlows bookings found for this work item.</p>
+                    <a href="{% url 'cflows:create_booking_from_work_item' work_item.id %}?type=cflows" 
+                       class="inline-flex items-center mt-3 text-blue-600 hover:text-blue-800 text-sm">
+                        <i class="fas fa-plus mr-1"></i>Create CFlows Booking
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Scheduling Service Bookings -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-900 flex items-center">
+                    <i class="fas fa-calendar-alt mr-2 text-purple-600"></i>
+                    Scheduling Service Bookings ({{ scheduling_bookings|length }})
+                </h2>
+            </div>
+            
+            {% if scheduling_bookings %}
+                <div class="divide-y divide-gray-200">
+                    {% for booking in scheduling_bookings %}
+                        <div class="p-6">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <h3 class="text-base font-medium text-gray-900">{{ booking.title }}</h3>
+                                    {% if booking.description %}
+                                        <p class="text-sm text-gray-600 mt-1">{{ booking.description|truncatewords:15 }}</p>
+                                    {% endif %}
+                                    
+                                    <div class="mt-3 space-y-1 text-sm text-gray-500">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-calendar-alt mr-2 w-4"></i>
+                                            {{ booking.resource.name }}
+                                        </div>
+                                        <div class="flex items-center">
+                                            <i class="fas fa-clock mr-2 w-4"></i>
+                                            {{ booking.requested_start|date:"M d, Y H:i" }} - {{ booking.requested_end|date:"H:i" }}
+                                        </div>
+                                        <div class="flex items-center">
+                                            <i class="fas fa-users mr-2 w-4"></i>
+                                            {{ booking.required_capacity }} capacity
+                                        </div>
+                                        <div class="flex items-center">
+                                            <i class="fas fa-flag mr-2 w-4"></i>
+                                            {{ booking.get_priority_display }} priority
+                                        </div>
+                                        {% if booking.requested_by %}
+                                            <div class="flex items-center">
+                                                <i class="fas fa-user-plus mr-2 w-4"></i>
+                                                Requested by {{ booking.requested_by.user.get_full_name|default:booking.requested_by.user.username }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="ml-4 flex flex-col items-end space-y-2">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                               {% if booking.status == 'completed' %}bg-green-100 text-green-800
+                                               {% elif booking.status == 'confirmed' %}bg-blue-100 text-blue-800
+                                               {% elif booking.status == 'pending' %}bg-yellow-100 text-yellow-800
+                                               {% elif booking.status == 'cancelled' %}bg-red-100 text-red-800
+                                               {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                        {{ booking.get_status_display }}
+                                    </span>
+                                    
+                                    <div class="flex space-x-1">
+                                        <a href="/services/scheduling/bookings/{{ booking.id }}/" 
+                                           class="text-purple-600 hover:text-purple-800 text-sm" 
+                                           title="View in Scheduling Service"
+                                           target="_blank">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                    <a href="{% url 'cflows:redirect_to_scheduling_bookings' work_item.id %}" 
+                       class="inline-flex items-center text-purple-600 hover:text-purple-800 text-sm">
+                        <i class="fas fa-external-link-alt mr-2"></i>
+                        Manage in Scheduling Service
+                    </a>
+                </div>
+            {% else %}
+                <div class="p-6 text-center text-gray-500">
+                    <i class="fas fa-calendar-times text-3xl mb-4"></i>
+                    <p class="text-sm">No scheduling service bookings found for this work item.</p>
+                    <a href="{% url 'cflows:create_booking_from_work_item' work_item.id %}?type=scheduling" 
+                       class="inline-flex items-center mt-3 text-purple-600 hover:text-purple-800 text-sm">
+                        <i class="fas fa-plus mr-1"></i>Create Scheduling Booking
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+async function completeBooking(bookingId, type) {
+    try {
+        let url;
+        if (type === 'cflows') {
+            url = `/services/cflows/api/bookings/${bookingId}/complete/`;
+        } else {
+            // For scheduling service, we'd need to implement this
+            alert('Completing scheduling service bookings should be done in the scheduling interface');
+            return;
+        }
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error completing booking: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error completing booking:', error);
+        alert('Error completing booking');
+    }
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

@@ -154,6 +154,7 @@ WSGI_APPLICATION = 'mediap.wsgi.application'
 
 DATABASES = {
     'default': dj_database_url.config(
+        # Uncomment when in development: default='sqlite:///db.sqlite3',
         conn_max_age=600,
         ssl_require=False
     )

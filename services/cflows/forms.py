@@ -912,6 +912,228 @@ class TeamBookingForm(forms.ModelForm):
         return cleaned_data
 
 
+class SchedulingBookingForm(forms.ModelForm):
+    """Form for creating bookings that integrate with the scheduling service"""
+    
+    # Allow choosing between CFlows team booking or Scheduling service booking
+    booking_type = forms.ChoiceField(
+        choices=[
+            ('cflows', 'CFlows Team Booking'),
+            ('scheduling', 'Scheduling Service Booking')
+        ],
+        initial='scheduling',
+        widget=forms.RadioSelect(attrs={
+            'class': 'text-purple-600 focus:ring-purple-500'
+        }),
+        help_text="Choose where to create the booking"
+    )
+    
+    # Team selection for CFlows bookings
+    team = forms.ModelChoiceField(
+        queryset=None,
+        empty_label="Select a team...",
+        required=False,
+        widget=forms.Select(attrs={
+            'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500'
+        }),
+        help_text="Team for CFlows booking (required for CFlows booking type)"
+    )
+    
+    # Resource selection for Scheduling service bookings
+    resource = forms.ModelChoiceField(
+        queryset=None,
+        empty_label="Select a resource...", 
+        required=False,
+        widget=forms.Select(attrs={
+            'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500'
+        }),
+        help_text="Resource for Scheduling service booking (required for scheduling booking type)"
+    )
+    
+    # Duration field (easier than separate start/end times)
+    duration_hours = forms.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        initial=2.0,
+        min_value=0.25,
+        max_value=168.0,  # 1 week max
+        widget=forms.NumberInput(attrs={
+            'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500',
+            'step': '0.25',
+            'min': '0.25',
+            'max': '168'
+        }),
+        help_text="Duration in hours (e.g., 2.5 for 2 hours 30 minutes)"
+    )
+    
+    class Meta:
+        model = TeamBooking
+        fields = [
+            'title', 'description', 'job_type', 'start_time',
+            'required_members'
+        ]
+        widgets = {
+            'title': forms.TextInput(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500',
+                'placeholder': 'Booking title'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500',
+                'placeholder': 'Booking description...',
+                'rows': 3
+            }),
+            'job_type': forms.Select(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500'
+            }),
+            'start_time': forms.DateTimeInput(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500',
+                'type': 'datetime-local'
+            }),
+            'required_members': forms.NumberInput(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500',
+                'min': '1'
+            }),
+        }
+
+    def __init__(self, *args, organization=None, work_item=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        self.organization = organization
+        self.work_item = work_item
+        
+        if organization:
+            # Set up team choices for CFlows bookings
+            self.fields['team'].queryset = Team.objects.filter(
+                organization=organization, is_active=True
+            ).order_by('name')
+            
+            # Set up job type choices
+            self.fields['job_type'].queryset = JobType.objects.filter(
+                organization=organization, is_active=True
+            ).order_by('name')
+            
+            # Set up resource choices for Scheduling service bookings
+            from services.scheduling.models import SchedulableResource
+            self.fields['resource'].queryset = SchedulableResource.objects.filter(
+                organization=organization, is_active=True
+            ).order_by('name')
+        
+        # Set default values if work_item is provided
+        if work_item:
+            if not self.fields['title'].initial:
+                current_step_name = work_item.current_step.name if work_item.current_step else 'Processing'
+                self.fields['title'].initial = f"{work_item.title} - {current_step_name}"
+            
+            if not self.fields['description'].initial:
+                self.fields['description'].initial = f"Booking for work item: {work_item.title}"
+            
+            # Pre-select team if current step has assigned team
+            if work_item.current_step and work_item.current_step.assigned_team:
+                self.fields['team'].initial = work_item.current_step.assigned_team
+                
+            # Set estimated duration if available
+            if work_item.current_step and work_item.current_step.estimated_duration_hours:
+                self.fields['duration_hours'].initial = work_item.current_step.estimated_duration_hours
+
+    def clean(self):
+        cleaned_data = super().clean()
+        booking_type = cleaned_data.get('booking_type')
+        team = cleaned_data.get('team')
+        resource = cleaned_data.get('resource')
+        start_time = cleaned_data.get('start_time')
+        duration_hours = cleaned_data.get('duration_hours')
+
+        # Validate booking type requirements
+        if booking_type == 'cflows' and not team:
+            self.add_error('team', 'Team is required for CFlows bookings')
+        elif booking_type == 'scheduling' and not resource:
+            self.add_error('resource', 'Resource is required for Scheduling service bookings')
+
+        # Calculate end time if both start time and duration are provided
+        if start_time and duration_hours:
+            from django.utils import timezone
+            end_time = start_time + timezone.timedelta(hours=float(duration_hours))
+            cleaned_data['end_time'] = end_time
+
+            # Validate that end time is after start time
+            if end_time <= start_time:
+                self.add_error('duration_hours', 'Duration must be greater than 0')
+
+        return cleaned_data
+    
+    def save_booking(self, user_profile):
+        """Save the booking based on the selected type"""
+        cleaned_data = self.cleaned_data
+        booking_type = cleaned_data['booking_type']
+        
+        if booking_type == 'cflows':
+            return self._save_cflows_booking(user_profile)
+        else:
+            return self._save_scheduling_booking(user_profile)
+    
+    def _save_cflows_booking(self, user_profile):
+        """Save a CFlows TeamBooking"""
+        from django.db import transaction
+        
+        with transaction.atomic():
+            booking = TeamBooking.objects.create(
+                team=self.cleaned_data['team'],
+                work_item=self.work_item,
+                workflow_step=self.work_item.current_step if self.work_item else None,
+                job_type=self.cleaned_data.get('job_type'),
+                title=self.cleaned_data['title'],
+                description=self.cleaned_data.get('description', ''),
+                start_time=self.cleaned_data['start_time'],
+                end_time=self.cleaned_data['end_time'],
+                required_members=self.cleaned_data.get('required_members', 1),
+                booked_by=user_profile
+            )
+        
+        return {
+            'type': 'cflows',
+            'booking': booking,
+            'id': booking.id,
+            'redirect_url': f'/services/cflows/work-items/{self.work_item.id}/' if self.work_item else '/services/cflows/bookings/'
+        }
+    
+    def _save_scheduling_booking(self, user_profile):
+        """Save a Scheduling service BookingRequest"""
+        from services.scheduling.models import BookingRequest
+        from django.db import transaction
+        
+        with transaction.atomic():
+            booking = BookingRequest.objects.create(
+                organization=self.organization,
+                title=self.cleaned_data['title'],
+                description=self.cleaned_data.get('description', ''),
+                requested_start=self.cleaned_data['start_time'],
+                requested_end=self.cleaned_data['end_time'],
+                resource=self.cleaned_data['resource'],
+                required_capacity=self.cleaned_data.get('required_members', 1),
+                status='pending',
+                priority=self.work_item.priority if self.work_item else 'normal',
+                source_service='cflows',
+                source_object_type='WorkItem',
+                source_object_id=str(self.work_item.id) if self.work_item else '',
+                requested_by=user_profile,
+                custom_data={
+                    'work_item_id': self.work_item.id if self.work_item else None,
+                    'work_item_title': self.work_item.title if self.work_item else None,
+                    'workflow_name': self.work_item.workflow.name if self.work_item and self.work_item.workflow else None,
+                    'current_step': self.work_item.current_step.name if self.work_item and self.work_item.current_step else None,
+                    'job_type_id': self.cleaned_data['job_type'].id if self.cleaned_data.get('job_type') else None,
+                    'job_type_name': self.cleaned_data['job_type'].name if self.cleaned_data.get('job_type') else None,
+                }
+            )
+        
+        return {
+            'type': 'scheduling',
+            'booking': booking,
+            'id': booking.id,
+            'redirect_url': f'/services/scheduling/bookings/{booking.id}/'
+        }
+
+
 class CustomFieldForm(forms.ModelForm):
     """Form for creating and editing custom fields"""
     

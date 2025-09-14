@@ -529,6 +529,87 @@ class WorkItem(models.Model):
             self.completed_at = None
         
         super().save(*args, **kwargs)
+    
+    def get_all_bookings_summary(self):
+        """Get a summary of all bookings (CFlows and Scheduling) for this work item"""
+        summary = {
+            'cflows_bookings': {
+                'total': 0,
+                'completed': 0,
+                'pending': 0
+            },
+            'scheduling_bookings': {
+                'total': 0,
+                'completed': 0,
+                'pending': 0
+            },
+            'total_bookings': 0,
+            'total_completed': 0,
+            'has_bookings': False
+        }
+        
+        # Get CFlows bookings
+        cflows_bookings = self.bookings.all()
+        summary['cflows_bookings']['total'] = cflows_bookings.count()
+        summary['cflows_bookings']['completed'] = cflows_bookings.filter(is_completed=True).count()
+        summary['cflows_bookings']['pending'] = summary['cflows_bookings']['total'] - summary['cflows_bookings']['completed']
+        
+        # Get Scheduling service bookings
+        try:
+            from services.scheduling.models import BookingRequest
+            scheduling_bookings = BookingRequest.objects.filter(
+                source_service='cflows',
+                source_object_type='WorkItem',
+                source_object_id=str(self.id)
+            )
+            summary['scheduling_bookings']['total'] = scheduling_bookings.count()
+            summary['scheduling_bookings']['completed'] = scheduling_bookings.filter(status='completed').count()
+            summary['scheduling_bookings']['pending'] = summary['scheduling_bookings']['total'] - summary['scheduling_bookings']['completed']
+        except ImportError:
+            pass  # Scheduling service not available
+        
+        # Calculate totals
+        summary['total_bookings'] = summary['cflows_bookings']['total'] + summary['scheduling_bookings']['total']
+        summary['total_completed'] = summary['cflows_bookings']['completed'] + summary['scheduling_bookings']['completed']
+        summary['has_bookings'] = summary['total_bookings'] > 0
+        
+        return summary
+    
+    def get_booking_requirements_status(self):
+        """Check if current step booking requirements are met"""
+        if not self.current_step or not self.current_step.requires_booking:
+            return {
+                'required': False,
+                'met': True,
+                'message': 'No booking required for current step'
+            }
+        
+        # Check CFlows bookings for current step
+        step_bookings = self.bookings.filter(workflow_step=self.current_step)
+        total_bookings = step_bookings.count()
+        completed_bookings = step_bookings.filter(is_completed=True).count()
+        
+        if total_bookings == 0:
+            return {
+                'required': True,
+                'met': False,
+                'message': 'Booking required but none created',
+                'needs_creation': True
+            }
+        elif completed_bookings == 0:
+            return {
+                'required': True,
+                'met': False,
+                'message': f'Booking created but not completed ({total_bookings} pending)',
+                'needs_completion': True
+            }
+        else:
+            return {
+                'required': True,
+                'met': True,
+                'message': f'All bookings completed ({completed_bookings}/{total_bookings})',
+                'all_completed': True
+            }
 
 
 class WorkItemHistory(models.Model):
@@ -667,6 +748,86 @@ class TeamBooking(models.Model):
     
     def __str__(self):
         return f"{self.team.name}: {self.title} ({self.start_time.strftime('%Y-%m-%d %H:%M')})"
+    
+    def to_scheduling_service_data(self):
+        """Convert this CFlows booking to data for creating a scheduling service booking"""
+        return {
+            'title': self.title,
+            'description': self.description or f"CFlows booking: {self.title}",
+            'requested_start': self.start_time,
+            'requested_end': self.end_time,
+            'required_capacity': self.required_members,
+            'priority': self.work_item.priority if self.work_item else 'normal',
+            'source_service': 'cflows',
+            'source_object_type': 'TeamBooking',
+            'source_object_id': str(self.id),
+            'custom_data': {
+                'cflows_booking_id': self.id,
+                'team_name': self.team.name,
+                'work_item_id': self.work_item.id if self.work_item else None,
+                'work_item_title': self.work_item.title if self.work_item else None,
+                'workflow_step': self.workflow_step.name if self.workflow_step else None,
+                'job_type': self.job_type.name if self.job_type else None
+            }
+        }
+    
+    def sync_to_scheduling_service(self):
+        """Create or update a corresponding booking in the scheduling service"""
+        try:
+            from services.scheduling.models import BookingRequest, SchedulableResource
+            
+            # Check if already synced
+            existing_booking = BookingRequest.objects.filter(
+                source_service='cflows',
+                source_object_type='TeamBooking',
+                source_object_id=str(self.id)
+            ).first()
+            
+            if existing_booking:
+                # Update existing booking
+                data = self.to_scheduling_service_data()
+                for key, value in data.items():
+                    if key not in ['source_service', 'source_object_type', 'source_object_id']:
+                        setattr(existing_booking, key, value)
+                existing_booking.save()
+                return existing_booking
+            else:
+                # Find or create a corresponding resource
+                resource = SchedulableResource.objects.filter(
+                    linked_team=self.team,
+                    organization=self.team.organization
+                ).first()
+                
+                if not resource:
+                    # Create a resource for this team if it doesn't exist
+                    resource = SchedulableResource.objects.create(
+                        organization=self.team.organization,
+                        name=f"{self.team.name} (Auto-created)",
+                        resource_type='team',
+                        description=f"Auto-created resource for team {self.team.name}",
+                        linked_team=self.team,
+                        service_type='cflows'
+                    )
+                
+                # Create new booking
+                data = self.to_scheduling_service_data()
+                booking = BookingRequest.objects.create(
+                    organization=self.team.organization,
+                    resource=resource,
+                    requested_by=self.booked_by,
+                    **data
+                )
+                return booking
+                
+        except ImportError:
+            # Scheduling service not available
+            return None
+        except Exception as e:
+            # Log error but don't break the application
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error syncing booking {self.id} to scheduling service: {str(e)}")
+            return None
 
 
 class CustomField(models.Model):

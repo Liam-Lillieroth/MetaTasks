@@ -52,6 +52,13 @@ urlpatterns = [
     path('work-items/<int:work_item_id>/priority/', transition_views.update_work_item_priority, name='update_work_item_priority'),
     path('work-items/<int:work_item_id>/transitions/', transition_views.get_available_transitions, name='get_available_transitions'),
     
+    # Work Item Booking Integration
+    path('work-items/<int:work_item_id>/create-booking/', views.create_booking_from_work_item, name='create_booking_from_work_item'),
+    path('work-items/<int:work_item_id>/bookings/status/', views.work_item_bookings_status, name='work_item_bookings_status'),
+    path('work-items/<int:work_item_id>/bookings/summary/', views.work_item_booking_summary, name='work_item_booking_summary'),
+    path('work-items/<int:work_item_id>/bookings/', views.view_work_item_bookings, name='view_work_item_bookings'),
+    path('work-items/<int:work_item_id>/bookings/scheduling/', views.redirect_to_scheduling_bookings, name='redirect_to_scheduling_bookings'),
+    
     # Work Item Comments and Attachments
     path('work-items/<int:work_item_id>/comments/add/', attachment_views.add_comment, name='add_comment'),
     path('work-items/<int:work_item_id>/comments/<int:comment_id>/edit/', attachment_views.edit_comment, name='edit_comment'),

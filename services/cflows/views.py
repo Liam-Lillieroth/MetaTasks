@@ -19,7 +19,7 @@ from .forms import (
     WorkflowForm, WorkflowStepForm, WorkItemForm, WorkItemCommentForm,
     WorkItemAttachmentForm, WorkflowTransitionForm, TeamBookingForm,
     CustomFieldForm, TeamForm, WorkflowCreationForm, BulkTransitionForm,
-    WorkflowFieldConfigForm
+    WorkflowFieldConfigForm, SchedulingBookingForm
 )
 import json
 
@@ -1484,6 +1484,285 @@ def select_workflow_for_transitions(request):
 
 @login_required
 @require_business_organization
+def select_workflow_for_bulk_transitions(request):
+    """Select workflow for bulk transitions creation"""
+    profile = get_user_profile(request)
+    if not profile:
+        return redirect('accounts:create_profile')
+    
+    workflows = Workflow.objects.filter(organization=profile.organization)
+    
+    context = {
+        'workflows': workflows,
+        'page_title': 'Select Workflow for Bulk Transitions',
+        'action_title': 'Create Bulk Transitions',
+        'action_url_name': 'cflows:bulk_create_transitions',
+        'action_description': 'Create multiple transitions at once for the selected workflow.'
+    }
+    return render(request, 'cflows/select_workflow_for_action.html', context)
+
+
+@login_required
+@require_organization_access
+def create_booking_from_work_item(request, work_item_id):
+    """Create a booking from any work item (CFlows or Scheduling service)"""
+    profile = get_user_profile(request)
+    if not profile:
+        return render(request, 'cflows/no_profile.html')
+    
+    work_item = get_object_or_404(
+        WorkItem,
+        id=work_item_id,
+        workflow__organization=profile.organization
+    )
+    
+    if request.method == 'POST':
+        form = SchedulingBookingForm(
+            request.POST,
+            organization=profile.organization,
+            work_item=work_item
+        )
+        if form.is_valid():
+            try:
+                booking_result = form.save_booking(profile)
+                
+                if booking_result['type'] == 'cflows':
+                    messages.success(
+                        request, 
+                        f'CFlows booking "{booking_result["booking"].title}" created successfully!'
+                    )
+                else:
+                    messages.success(
+                        request, 
+                        f'Scheduling service booking "{booking_result["booking"].title}" created successfully!'
+                    )
+                
+                # Add parameter to show booking creation success on work item detail
+                return redirect(f'{booking_result["redirect_url"]}?booking_created=1')
+                
+            except Exception as e:
+                messages.error(request, f'Error creating booking: {str(e)}')
+    else:
+        form = SchedulingBookingForm(
+            organization=profile.organization,
+            work_item=work_item
+        )
+    
+    # Get existing bookings for this work item to show context
+    cflows_bookings = TeamBooking.objects.filter(work_item=work_item).select_related('team')
+    
+    # Get scheduling service bookings for this work item
+    scheduling_bookings = []
+    try:
+        from services.scheduling.models import BookingRequest
+        scheduling_bookings = BookingRequest.objects.filter(
+            source_service='cflows',
+            source_object_type='WorkItem',
+            source_object_id=str(work_item.id)
+        ).select_related('resource')
+    except ImportError:
+        pass  # Scheduling service not available
+    
+    context = {
+        'profile': profile,
+        'work_item': work_item,
+        'form': form,
+        'cflows_bookings': cflows_bookings,
+        'scheduling_bookings': scheduling_bookings,
+        'title': f'Create Booking - {work_item.title}'
+    }
+    
+    return render(request, 'cflows/create_booking_from_work_item.html', context)
+
+
+@login_required
+@require_organization_access 
+def work_item_bookings_status(request, work_item_id):
+    """Get booking status for a work item (used for AJAX updates)"""
+    profile = get_user_profile(request)
+    if not profile:
+        return JsonResponse({'error': 'No profile found'}, status=403)
+    
+    work_item = get_object_or_404(
+        WorkItem,
+        id=work_item_id,
+        workflow__organization=profile.organization
+    )
+    
+    # Get CFlows bookings
+    cflows_bookings = TeamBooking.objects.filter(work_item=work_item).select_related('team')
+    cflows_data = []
+    for booking in cflows_bookings:
+        cflows_data.append({
+            'id': booking.id,
+            'title': booking.title,
+            'team': booking.team.name if booking.team else 'No Team',
+            'start_time': booking.start_time.isoformat(),
+            'end_time': booking.end_time.isoformat(),
+            'is_completed': booking.is_completed,
+            'view_url': f'/services/cflows/calendar/bookings/{booking.id}/',
+            'type': 'cflows'
+        })
+    
+    # Get Scheduling service bookings
+    scheduling_data = []
+    try:
+        from services.scheduling.models import BookingRequest
+        scheduling_bookings = BookingRequest.objects.filter(
+            source_service='cflows',
+            source_object_type='WorkItem',
+            source_object_id=str(work_item.id)
+        ).select_related('resource')
+        
+        for booking in scheduling_bookings:
+            scheduling_data.append({
+                'id': booking.id,
+                'title': booking.title,
+                'resource': booking.resource.name if booking.resource else 'No Resource',
+                'requested_start': booking.requested_start.isoformat(),
+                'requested_end': booking.requested_end.isoformat(),
+                'status': booking.status,
+                'view_url': f'/services/scheduling/bookings/{booking.id}/',
+                'type': 'scheduling'
+            })
+    except ImportError:
+        pass  # Scheduling service not available
+    
+    return JsonResponse({
+        'work_item_id': work_item.id,
+        'work_item_title': work_item.title,
+        'cflows_bookings': cflows_data,
+        'scheduling_bookings': scheduling_data,
+        'total_bookings': len(cflows_data) + len(scheduling_data),
+        'has_bookings': bool(cflows_data or scheduling_data)
+    })
+
+
+@login_required
+@require_organization_access
+def work_item_booking_summary(request, work_item_id):
+    """Get a summary of bookings for display in work item detail"""
+    profile = get_user_profile(request)
+    if not profile:
+        return JsonResponse({'error': 'No profile found'}, status=403)
+    
+    work_item = get_object_or_404(
+        WorkItem,
+        id=work_item_id,
+        workflow__organization=profile.organization
+    )
+    
+    # Count CFlows bookings
+    cflows_total = TeamBooking.objects.filter(work_item=work_item).count()
+    cflows_completed = TeamBooking.objects.filter(work_item=work_item, is_completed=True).count()
+    
+    # Count Scheduling service bookings
+    scheduling_total = 0
+    scheduling_completed = 0
+    try:
+        from services.scheduling.models import BookingRequest
+        scheduling_total = BookingRequest.objects.filter(
+            source_service='cflows',
+            source_object_type='WorkItem',
+            source_object_id=str(work_item.id)
+        ).count()
+        scheduling_completed = BookingRequest.objects.filter(
+            source_service='cflows',
+            source_object_type='WorkItem',
+            source_object_id=str(work_item.id),
+            status='completed'
+        ).count()
+    except ImportError:
+        pass
+    
+    total_bookings = cflows_total + scheduling_total
+    total_completed = cflows_completed + scheduling_completed
+    
+    return JsonResponse({
+        'total_bookings': total_bookings,
+        'completed_bookings': total_completed,
+        'pending_bookings': total_bookings - total_completed,
+        'has_bookings': total_bookings > 0,
+        'cflows_bookings': {
+            'total': cflows_total,
+            'completed': cflows_completed
+        },
+        'scheduling_bookings': {
+            'total': scheduling_total,
+            'completed': scheduling_completed
+        }
+    })
+
+
+@login_required
+@require_organization_access
+def view_work_item_bookings(request, work_item_id):
+    """Navigate to view all bookings for a work item (both CFlows and Scheduling)"""
+    profile = get_user_profile(request)
+    if not profile:
+        return render(request, 'cflows/no_profile.html')
+    
+    work_item = get_object_or_404(
+        WorkItem,
+        id=work_item_id,
+        workflow__organization=profile.organization
+    )
+    
+    # Get CFlows bookings
+    cflows_bookings = TeamBooking.objects.filter(work_item=work_item).select_related('team')
+    
+    # Get Scheduling service bookings
+    scheduling_bookings = []
+    try:
+        from services.scheduling.models import BookingRequest
+        scheduling_bookings = BookingRequest.objects.filter(
+            source_service='cflows',
+            source_object_type='WorkItem',
+            source_object_id=str(work_item.id)
+        ).select_related('resource')
+    except ImportError:
+        pass  # Scheduling service not available
+    
+    context = {
+        'profile': profile,
+        'work_item': work_item,
+        'cflows_bookings': cflows_bookings,
+        'scheduling_bookings': scheduling_bookings,
+        'title': f'Bookings for {work_item.title}'
+    }
+    
+    return render(request, 'cflows/work_item_bookings.html', context)
+
+
+@login_required
+@require_organization_access  
+def redirect_to_scheduling_bookings(request, work_item_id):
+    """Redirect to scheduling service with filters for this work item"""
+    profile = get_user_profile(request)
+    if not profile:
+        return redirect('cflows:work_items_list')
+    
+    work_item = get_object_or_404(
+        WorkItem,
+        id=work_item_id,
+        workflow__organization=profile.organization
+    )
+    
+    # Construct URL with filters for this work item
+    from django.urls import reverse
+    from urllib.parse import urlencode
+    
+    base_url = reverse('scheduling:booking_list')
+    params = {
+        'source_service': 'cflows',
+        'source_object_id': str(work_item.id),
+        'work_item_title': work_item.title
+    }
+    
+    redirect_url = f"{base_url}?{urlencode(params)}"
+    return redirect(redirect_url)
+
+
 def select_workflow_for_bulk_transitions(request):
     """Select a workflow for bulk transition creation (navbar quick access)"""
     profile = get_user_profile(request)
