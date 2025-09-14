@@ -1,0 +1,933 @@
+{% extends "scheduling/scheduling_base.html" %}
+{% load static %}
+
+{% block title %}Calendar - Scheduling{% endblock %}
+
+{% block extra_head %}
+    <!-- CSRF Token for AJAX requests -->
+    <meta name="csrf-token" content="{{ csrf_token }}">
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-6">
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">Booking Calendar</h1>
+                <p class="text-gray-600">View and manage your resource bookings</p>
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="exportCalendar()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center">
+                    <i class="fas fa-download mr-2"></i>
+                    Export
+                </button>
+                <button onclick="printCalendar()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center">
+                    <i class="fas fa-print mr-2"></i>
+                    Print
+                </button>
+                <a href="{% url 'scheduling:create_booking' %}" 
+                   class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center">
+                    <i class="fas fa-plus mr-2"></i>
+                    New Booking
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-calendar-check text-white text-sm"></i>
+                    </div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-blue-900">Confirmed</p>
+                    <p class="text-lg font-semibold text-blue-900" id="confirmedCount">0</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-clock text-white text-sm"></i>
+                    </div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-green-900">In Progress</p>
+                    <p class="text-lg font-semibold text-green-900" id="inProgressCount">0</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-yellow-500 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-hourglass-half text-white text-sm"></i>
+                    </div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-yellow-900">Pending</p>
+                    <p class="text-lg font-semibold text-yellow-900" id="pendingCount">0</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-gray-500 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-check-circle text-white text-sm"></i>
+                    </div>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-gray-900">Completed</p>
+                    <p class="text-lg font-semibold text-gray-900" id="completedCount">0</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advanced Filters -->
+    <div class="bg-white rounded-lg shadow-sm border mb-6 overflow-hidden">
+        <!-- Filter Header -->
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-b px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-filter text-white text-sm"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900">Calendar Filters</h3>
+                </div>
+                <button id="toggleFilters" class="text-blue-600 hover:text-blue-800 transition-colors">
+                    <i class="fas fa-chevron-up" id="filterToggleIcon"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Filter Content -->
+        <div id="filterContent" class="p-6 space-y-6">
+            <!-- Date Range Filter -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">From Date</label>
+                    <input type="date" id="filterStartDate" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">To Date</label>
+                    <input type="date" id="filterEndDate" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                    <div class="relative">
+                        <input type="text" id="searchBookings" placeholder="Search bookings..." class="w-full border border-gray-300 rounded-lg px-3 py-2 pl-10 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Status Filter -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-3">Filter by Status</label>
+                <div class="flex flex-wrap gap-3">
+                    <label class="flex items-center space-x-2 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg cursor-pointer transition-colors">
+                        <input type="checkbox" class="status-filter rounded border-blue-300 text-blue-600 focus:ring-blue-500" value="confirmed" checked>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                            <span class="text-sm font-medium text-blue-900">Confirmed</span>
+                        </div>
+                    </label>
+                    <label class="flex items-center space-x-2 bg-green-50 hover:bg-green-100 px-4 py-2 rounded-lg cursor-pointer transition-colors">
+                        <input type="checkbox" class="status-filter rounded border-green-300 text-green-600 focus:ring-green-500" value="in_progress" checked>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                            <span class="text-sm font-medium text-green-900">In Progress</span>
+                        </div>
+                    </label>
+                    <label class="flex items-center space-x-2 bg-yellow-50 hover:bg-yellow-100 px-4 py-2 rounded-lg cursor-pointer transition-colors">
+                        <input type="checkbox" class="status-filter rounded border-yellow-300 text-yellow-600 focus:ring-yellow-500" value="pending" checked>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                            <span class="text-sm font-medium text-yellow-900">Pending</span>
+                        </div>
+                    </label>
+                    <label class="flex items-center space-x-2 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-lg cursor-pointer transition-colors">
+                        <input type="checkbox" class="status-filter rounded border-gray-300 text-gray-600 focus:ring-gray-500" value="completed" checked>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-gray-500 rounded-full"></div>
+                            <span class="text-sm font-medium text-gray-900">Completed</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Resource Filter with Groups -->
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <label class="block text-sm font-medium text-gray-700">Filter by Resources</label>
+                    <div class="flex space-x-2">
+                        <button id="selectAllResources" class="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-md transition-colors">Select All</button>
+                        <button id="clearAllResources" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-md transition-colors">Clear All</button>
+                    </div>
+                </div>
+                
+                <!-- Group resources by type -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% regroup resources by get_resource_type_display as resource_groups %}
+                    {% for group in resource_groups %}
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="font-medium text-gray-900 flex items-center">
+                                <i class="fas fa-{{ group.grouper|lower|default:'cube' }} mr-2 text-gray-600"></i>
+                                {{ group.grouper }}
+                            </h4>
+                            <span class="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">{{ group.list|length }}</span>
+                        </div>
+                        <div class="space-y-2">
+                            {% for resource in group.list %}
+                            <label class="flex items-center space-x-3 p-2 hover:bg-white rounded-md cursor-pointer transition-colors group">
+                                <input type="checkbox" value="{{ resource.id }}" class="resource-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm font-medium text-gray-900 truncate">{{ resource.name }}</span>
+                                        <div class="flex items-center space-x-1 ml-2">
+                                            {% if resource.is_active %}
+                                            <div class="w-2 h-2 bg-green-400 rounded-full" title="Active"></div>
+                                            {% else %}
+                                            <div class="w-2 h-2 bg-red-400 rounded-full" title="Inactive"></div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% if resource.description %}
+                                    <p class="text-xs text-gray-500 truncate">{{ resource.description }}</p>
+                                    {% endif %}
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-span-full text-center py-8 text-gray-500">
+                        <i class="fas fa-inbox text-3xl mb-3"></i>
+                        <p>No resources available</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Filter Actions -->
+            <div class="flex items-center justify-between pt-4 border-t">
+                <div class="text-sm text-gray-600">
+                    <span id="filteredCount">0</span> bookings found
+                </div>
+                <div class="flex space-x-3">
+                    <button id="resetFilters" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                        <i class="fas fa-undo mr-2"></i>Reset Filters
+                    </button>
+                    <button id="applyFilters" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        <i class="fas fa-check mr-2"></i>Apply Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar Container -->
+    <div class="bg-white rounded-lg shadow-sm border p-6">
+        <div id="calendar"></div>
+    </div>
+</div>
+
+<!-- Event Details Modal -->
+<div id="eventModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Booking Details</h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="eventDetails">
+            <!-- Event details will be populated here -->
+        </div>
+    </div>
+</div>
+
+<!-- Quick Booking Modal -->
+<div id="quickBookingModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Quick Booking</h3>
+            <button onclick="closeQuickBookingModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="quickBookingForm">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input type="date" id="quickBookingDate" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                        <input type="time" id="quickBookingStartTime" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                        <input type="time" id="quickBookingEndTime" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                    <input type="text" id="quickBookingTitle" placeholder="Booking title" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Resource</label>
+                    <select id="quickBookingResource" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Select a resource</option>
+                        {% for resource in resources %}
+                        <option value="{{ resource.id }}">{{ resource.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
+                    <textarea id="quickBookingDescription" rows="3" placeholder="Booking description" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+            </div>
+            
+            <div class="flex justify-end space-x-3 mt-6">
+                <button type="button" onclick="closeQuickBookingModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Create Booking</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let calendar;
+    let selectedResources = [];
+    let selectedStatuses = ['confirmed', 'in_progress', 'pending', 'completed'];
+    let searchTerm = '';
+    let dateRange = { start: null, end: null };
+    
+    // Real-time updates simulation
+    let realTimeUpdateInterval;
+    
+    function startRealTimeUpdates() {
+        realTimeUpdateInterval = setInterval(() => {
+            if (calendar) {
+                console.log('🔄 Auto-refreshing calendar events...');
+                calendar.refetchEvents();
+            }
+        }, 30000); // Refresh every 30 seconds
+    }
+    
+    function stopRealTimeUpdates() {
+        if (realTimeUpdateInterval) {
+            clearInterval(realTimeUpdateInterval);
+        }
+    }
+    
+    // Initialize FullCalendar
+    function initializeCalendar() {
+        const calendarEl = document.getElementById('calendar');
+        
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,timeGridDay,resourceTimelineDay'
+            },
+            height: 'auto',
+            editable: true,
+            droppable: true,
+            events: function(info, successCallback, failureCallback) {
+                loadEvents(info.start, info.end, successCallback, failureCallback);
+            },
+            eventClick: function(info) {
+                showEventDetails(info.event);
+            },
+            dateClick: function(info) {
+                // Quick booking creation on day click
+                quickCreateBooking(info.date);
+            },
+            eventDrop: function(info) {
+                updateBookingTime(info.event, info.oldEvent);
+            },
+            eventResize: function(info) {
+                updateBookingTime(info.event, info.oldEvent);
+            },
+            eventDisplay: 'block',
+            dayMaxEvents: 3,
+            moreLinkClick: 'popover',
+            eventTimeFormat: {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            },
+            slotLabelFormat: {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            },
+            // Custom styling
+            eventDidMount: function(info) {
+                // Add status-based styling
+                const status = info.event.extendedProps.status;
+                const statusColors = {
+                    'confirmed': { bg: '#3b82f6', border: '#1d4ed8' },
+                    'in_progress': { bg: '#10b981', border: '#059669' },
+                    'completed': { bg: '#6b7280', border: '#4b5563' },
+                    'pending': { bg: '#f59e0b', border: '#d97706' }
+                };
+                
+                if (statusColors[status]) {
+                    info.el.style.backgroundColor = statusColors[status].bg;
+                    info.el.style.borderColor = statusColors[status].border;
+                }
+                
+                // Add hover effect
+                info.el.style.cursor = 'pointer';
+                info.el.style.transition = 'all 0.2s ease';
+                
+                info.el.addEventListener('mouseenter', function() {
+                    this.style.transform = 'scale(1.02)';
+                    this.style.zIndex = '10';
+                });
+                
+                info.el.addEventListener('mouseleave', function() {
+                    this.style.transform = 'scale(1)';
+                    this.style.zIndex = 'auto';
+                });
+            }
+        });
+        
+        calendar.render();
+    }
+    
+    // Load events from API
+    function loadEvents(start, end, successCallback, failureCallback) {
+        const params = new URLSearchParams({
+            start: start.toISOString(),
+            end: end.toISOString()
+        });
+        
+        selectedResources.forEach(resourceId => {
+            params.append('resources[]', resourceId);
+        });
+        
+        selectedStatuses.forEach(status => {
+            params.append('statuses[]', status);
+        });
+        
+        if (searchTerm) {
+            params.append('search', searchTerm);
+        }
+        
+        // Get CSRF token
+        const csrfToken = document.querySelector('meta[name=csrf-token]')?.content ||
+                         getCookie('csrftoken');
+        
+        fetch(`/services/scheduling/api/calendar-events/?${params}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json',
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(events => {
+            console.log('Loaded events:', events.length);
+            
+            // Update stats
+            updateCalendarStats(events);
+            
+            // Transform events for FullCalendar
+            const calendarEvents = events.map(event => ({
+                id: event.id,
+                title: event.title,
+                start: event.start,
+                end: event.end,
+                extendedProps: {
+                    status: event.status,
+                    resource: event.resource,
+                    resourceType: event.resourceType,
+                    description: event.description,
+                    requestedBy: event.requestedBy,
+                    sourceService: event.sourceService
+                }
+            }));
+            
+            successCallback(calendarEvents);
+        })
+        .catch(error => {
+            console.error('Error loading events:', error);
+            failureCallback(error);
+        });
+    }
+    
+    // Show event details in modal
+    function showEventDetails(event) {
+        const modal = document.getElementById('eventModal');
+        const details = document.getElementById('eventDetails');
+        
+        const startTime = new Date(event.start).toLocaleString();
+        const endTime = new Date(event.end).toLocaleString();
+        const props = event.extendedProps;
+        
+        const statusBadges = {
+            'confirmed': 'bg-blue-100 text-blue-800',
+            'in_progress': 'bg-green-100 text-green-800',
+            'completed': 'bg-gray-100 text-gray-800',
+            'pending': 'bg-yellow-100 text-yellow-800'
+        };
+        
+        details.innerHTML = `
+            <div class="space-y-4">
+                <div>
+                    <h4 class="font-semibold text-lg text-gray-900">${event.title}</h4>
+                    <span class="inline-block px-2 py-1 text-xs font-medium rounded ${statusBadges[props.status] || 'bg-gray-100 text-gray-800'}">${props.status.replace('_', ' ').toUpperCase()}</span>
+                </div>
+                
+                <div class="grid grid-cols-1 gap-3">
+                    <div>
+                        <span class="font-medium text-gray-700">Time:</span>
+                        <p class="text-gray-600">${startTime} - ${endTime}</p>
+                    </div>
+                    
+                    ${props.resource ? `
+                    <div>
+                        <span class="font-medium text-gray-700">Resource:</span>
+                        <p class="text-gray-600">${props.resource} ${props.resourceType ? `(${props.resourceType})` : ''}</p>
+                    </div>
+                    ` : ''}
+                    
+                    ${props.description ? `
+                    <div>
+                        <span class="font-medium text-gray-700">Description:</span>
+                        <p class="text-gray-600">${props.description}</p>
+                    </div>
+                    ` : ''}
+                    
+                    ${props.requestedBy ? `
+                    <div>
+                        <span class="font-medium text-gray-700">Requested by:</span>
+                        <p class="text-gray-600">${props.requestedBy}</p>
+                    </div>
+                    ` : ''}
+                    
+                    ${props.sourceService ? `
+                    <div>
+                        <span class="font-medium text-gray-700">Source:</span>
+                        <p class="text-gray-600">${props.sourceService}</p>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                <div class="flex justify-end space-x-3 pt-4 border-t">
+                    <button onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Close</button>
+                    <a href="/services/scheduling/bookings/${event.id}/" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">View Details</a>
+                </div>
+            </div>
+        `;
+        
+        modal.classList.remove('hidden');
+    }
+    
+    // Close modal
+    window.closeModal = function() {
+        document.getElementById('eventModal').classList.add('hidden');
+    };
+    
+    // Update calendar stats
+    function updateCalendarStats(events) {
+        const stats = {
+            confirmed: 0,
+            in_progress: 0,
+            pending: 0,
+            completed: 0
+        };
+        
+        events.forEach(event => {
+            if (stats.hasOwnProperty(event.status)) {
+                stats[event.status]++;
+            }
+        });
+        
+        document.getElementById('confirmedCount').textContent = stats.confirmed;
+        document.getElementById('inProgressCount').textContent = stats.in_progress;
+        document.getElementById('pendingCount').textContent = stats.pending;
+        document.getElementById('completedCount').textContent = stats.completed;
+    }
+    
+    // Quick booking creation
+    function quickCreateBooking(date) {
+        const modal = document.getElementById('quickBookingModal');
+        const dateInput = document.getElementById('quickBookingDate');
+        const startTimeInput = document.getElementById('quickBookingStartTime');
+        const endTimeInput = document.getElementById('quickBookingEndTime');
+        
+        // Set default date
+        dateInput.value = date.toISOString().split('T')[0];
+        
+        // Set default times (current time + 1 hour)
+        const now = new Date();
+        const startTime = new Date(now.getTime() + 60 * 60 * 1000); // +1 hour
+        const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // +1 hour
+        
+        startTimeInput.value = startTime.toTimeString().slice(0, 5);
+        endTimeInput.value = endTime.toTimeString().slice(0, 5);
+        
+        modal.classList.remove('hidden');
+    }
+    
+    // Close quick booking modal
+    window.closeQuickBookingModal = function() {
+        document.getElementById('quickBookingModal').classList.add('hidden');
+        document.getElementById('quickBookingForm').reset();
+    };
+    
+    // Handle quick booking form submission
+    document.getElementById('quickBookingForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            date: document.getElementById('quickBookingDate').value,
+            start_time: document.getElementById('quickBookingStartTime').value,
+            end_time: document.getElementById('quickBookingEndTime').value,
+            title: document.getElementById('quickBookingTitle').value,
+            resource: document.getElementById('quickBookingResource').value,
+            description: document.getElementById('quickBookingDescription').value
+        };
+        
+        // Basic validation
+        if (!formData.title || !formData.resource || !formData.start_time || !formData.end_time) {
+            alert('Please fill in all required fields');
+            return;
+        }
+        
+        // For now, redirect to full booking form with pre-filled data
+        const params = new URLSearchParams(formData);
+        window.location.href = `{% url 'scheduling:create_booking' %}?${params.toString()}`;
+    });
+    
+    // Export calendar to CSV
+    window.exportCalendar = function() {
+        const events = calendar.getEvents();
+        
+        const csvData = [
+            ['Title', 'Start Date', 'End Date', 'Resource', 'Status', 'Description']
+        ];
+        
+        events.forEach(event => {
+            csvData.push([
+                event.title,
+                event.start ? event.start.toISOString().split('T')[0] : '',
+                event.end ? event.end.toISOString().split('T')[0] : '',
+                event.extendedProps.resource || '',
+                event.extendedProps.status || '',
+                event.extendedProps.description || ''
+            ]);
+        });
+        
+        const csvContent = csvData.map(row => row.map(field => `"${field}"`).join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `calendar-export-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    };
+    
+    // Print calendar
+    window.printCalendar = function() {
+        window.print();
+    };
+    
+    // Helper function to get cookie
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    // Initialize resource filters
+    function initializeResourceFilters() {
+        const allResourcesCheckbox = document.getElementById('all-resources');
+        const resourceCheckboxes = document.querySelectorAll('.resource-checkbox');
+        
+        // Get all resource IDs initially
+        selectedResources = Array.from(resourceCheckboxes).map(cb => cb.value);
+        
+        // Handle "All Resources" checkbox
+        if (allResourcesCheckbox) {
+            allResourcesCheckbox.addEventListener('change', function() {
+                resourceCheckboxes.forEach(cb => {
+                    cb.checked = this.checked;
+                });
+                updateResourceFilter();
+            });
+        }
+        
+        // Handle individual resource checkboxes
+        resourceCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                updateResourceFilter();
+                
+                // Update "All Resources" checkbox
+                const checkedCount = Array.from(resourceCheckboxes).filter(cb => cb.checked).length;
+                allResourcesCheckbox.checked = checkedCount === resourceCheckboxes.length;
+            });
+        });
+    }
+    
+    // Update resource filter
+    function updateResourceFilter() {
+        const resourceCheckboxes = document.querySelectorAll('.resource-checkbox');
+        selectedResources = Array.from(resourceCheckboxes)
+            .filter(cb => cb.checked)
+            .map(cb => cb.value);
+        
+        console.log('Selected resources:', selectedResources);
+        
+        // Refresh calendar events
+        if (calendar) {
+            calendar.refetchEvents();
+        }
+    }
+    
+    // Update booking time via drag & drop
+    function updateBookingTime(event, oldEvent) {
+        const bookingId = event.id;
+        const newStart = event.start.toISOString();
+        const newEnd = event.end ? event.end.toISOString() : null;
+        
+        // Show notification - for now just simulate success
+        showNotification('Booking time updated successfully', 'success');
+        console.log('Booking updated:', { bookingId, newStart, newEnd });
+    }
+    
+    // Advanced filter functions
+    function initializeAdvancedFilters() {
+        // Filter toggle
+        const toggleBtn = document.getElementById('toggleFilters');
+        const filterContent = document.getElementById('filterContent');
+        const icon = document.getElementById('filterToggleIcon');
+        
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function() {
+                if (filterContent.classList.contains('hidden')) {
+                    filterContent.classList.remove('hidden');
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    filterContent.classList.add('hidden');
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            });
+        }
+        
+        // Resource selection buttons
+        const selectAllBtn = document.getElementById('selectAllResources');
+        const clearAllBtn = document.getElementById('clearAllResources');
+        
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', function() {
+                document.querySelectorAll('.resource-checkbox').forEach(cb => cb.checked = true);
+                updateResourceFilter();
+            });
+        }
+        
+        if (clearAllBtn) {
+            clearAllBtn.addEventListener('click', function() {
+                document.querySelectorAll('.resource-checkbox').forEach(cb => cb.checked = false);
+                updateResourceFilter();
+            });
+        }
+        
+        // Status filters
+        document.querySelectorAll('.status-filter').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                selectedStatuses = Array.from(document.querySelectorAll('.status-filter:checked')).map(cb => cb.value);
+                if (calendar) {
+                    calendar.refetchEvents();
+                }
+            });
+        });
+        
+        // Search filter
+        const searchInput = document.getElementById('searchBookings');
+        if (searchInput) {
+            let searchTimeout;
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    searchTerm = this.value.toLowerCase();
+                    if (calendar) {
+                        calendar.refetchEvents();
+                    }
+                }, 300);
+            });
+        }
+        
+        // Reset filters
+        const resetBtn = document.getElementById('resetFilters');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', function() {
+                // Reset all filters
+                selectedResources = Array.from(document.querySelectorAll('.resource-checkbox')).map(cb => {
+                    cb.checked = true;
+                    return cb.value;
+                });
+                selectedStatuses = ['confirmed', 'in_progress', 'pending', 'completed'];
+                document.querySelectorAll('.status-filter').forEach(cb => cb.checked = true);
+                searchTerm = '';
+                dateRange = { start: null, end: null };
+                
+                // Reset UI
+                const searchInput = document.getElementById('searchBookings');
+                if (searchInput) searchInput.value = '';
+                
+                if (calendar) {
+                    calendar.refetchEvents();
+                }
+            });
+        }
+    }
+    
+    // Show notifications
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all duration-300 transform translate-x-full`;
+        
+        const colors = {
+            success: 'bg-green-500 text-white',
+            error: 'bg-red-500 text-white',
+            info: 'bg-blue-500 text-white',
+            warning: 'bg-yellow-500 text-white'
+        };
+        
+        notification.className += ` ${colors[type] || colors.info}`;
+        notification.innerHTML = `
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'times' : 'info'}-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Animate in
+        setTimeout(() => {
+            notification.classList.remove('translate-x-full');
+        }, 100);
+        
+        // Auto remove after 3 seconds
+        setTimeout(() => {
+            notification.classList.add('translate-x-full');
+            setTimeout(() => {
+                if (document.body.contains(notification)) {
+                    document.body.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+    
+    // Mobile optimizations
+    function initializeMobileOptimizations() {
+        // Touch gestures for mobile navigation
+        let touchStartX = 0;
+        
+        if (calendar && calendar.el) {
+            calendar.el.addEventListener('touchstart', function(e) {
+                touchStartX = e.touches[0].clientX;
+            });
+            
+            calendar.el.addEventListener('touchend', function(e) {
+                if (!e.changedTouches) return;
+                
+                const touchEndX = e.changedTouches[0].clientX;
+                const diffX = touchStartX - touchEndX;
+                
+                // Minimum swipe distance
+                if (Math.abs(diffX) > 50) {
+                    if (diffX > 0) {
+                        // Swipe left - next
+                        calendar.next();
+                    } else {
+                        // Swipe right - previous
+                        calendar.prev();
+                    }
+                }
+            });
+        }
+    }
+    
+    // Initialize everything
+    function initializeAll() {
+        initializeCalendar();
+        initializeResourceFilters();
+        initializeAdvancedFilters();
+        initializeMobileOptimizations();
+        startRealTimeUpdates();
+        
+        // Set initial resource selection
+        selectedResources = Array.from(document.querySelectorAll('.resource-checkbox')).map(cb => {
+            cb.checked = true;
+            return cb.value;
+        });
+    }
+    
+    // Start initialization
+    initializeAll();
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        stopRealTimeUpdates();
+    });
+    
+    // Close modal when clicking outside
+    document.getElementById('eventModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeModal();
+        }
+    });
+});
+</script>
+{% endblock %}

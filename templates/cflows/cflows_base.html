@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CFlows - Workflow Management{% endblock %}</title>
+    
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- FullCalendar CDN for calendar features -->
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/main.min.css' rel='stylesheet' />
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/main.min.js'></script>
+    
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Alpine.js for interactive components -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    {% block extra_head %}{% endblock %}
+    
+    <style>
+        /* Custom CFlows theme colors */
+        :root {
+            --cflows-primary: #4f46e5;
+            --cflows-secondary: #7c3aed;
+            --cflows-success: #10b981;
+            --cflows-warning: #f59e0b;
+            --cflows-danger: #ef4444;
+        }
+        
+        .cflows-gradient {
+            background: linear-gradient(135deg, var(--cflows-primary) 0%, var(--cflows-secondary) 100%);
+        }
+        
+        .sidebar-transition {
+            transition: transform 0.3s ease-in-out;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 font-sans" x-data="{ sidebarOpen: false }">
+    <!-- Top Header Bar -->
+    <header class="cflows-gradient shadow-lg sticky top-0 z-40 lg:z-30">
+        <div class="flex justify-between items-center h-16 px-4">
+            <!-- Mobile Menu Button & Logo -->
+            <div class="flex items-center">
+                <button @click="sidebarOpen = !sidebarOpen" 
+                        class="text-white hover:bg-white hover:bg-opacity-10 p-2 rounded-lg mr-3 lg:hidden">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="flex items-center">
+                    <div class="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-project-diagram text-white text-lg"></i>
+                    </div>
+                    <div class="ml-3">
+                        <a href="{% url 'cflows:index' %}" class="text-white font-bold text-xl">
+                            CFlows
+                        </a>
+                        <div class="text-indigo-100 text-xs">
+                            {% if profile %}{{ profile.organization.name }}{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Top Right Actions -->
+            <div class="flex items-center space-x-2">
+                <!-- Admin Panel -->
+                {% if profile.has_staff_panel_access or profile.is_organization_admin %}
+                <a href="/admin/" 
+                   class="text-indigo-100 hover:bg-white hover:bg-opacity-10 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center"
+                   title="Admin Panel">
+                    <i class="fas fa-cog mr-2"></i>
+                    <span class="hidden sm:inline">Admin</span>
+                </a>
+                {% endif %}
+                
+                <!-- User Profile -->
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open" class="flex items-center text-indigo-100 hover:bg-white hover:bg-opacity-10 px-3 py-2 rounded-lg transition-all duration-200">
+                        {% if profile.avatar %}
+                            <img class="h-8 w-8 rounded-full mr-2" src="{{ profile.avatar.url }}" alt="{{ user.get_full_name }}">
+                        {% else %}
+                            <div class="h-8 w-8 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-white text-sm font-medium mr-2">
+                                {{ user.first_name.0|default:user.username.0|upper }}
+                            </div>
+                        {% endif %}
+                        <span class="hidden sm:inline text-sm">{{ user.get_full_name|default:user.username }}</span>
+                        <i class="fas fa-chevron-down ml-1 text-xs"></i>
+                    </button>
+                    
+                    <div x-show="open" 
+                         @click.away="open = false"
+                         x-transition:enter="transition ease-out duration-100"
+                         x-transition:enter-start="transform opacity-0 scale-95"
+                         x-transition:enter-end="transform opacity-100 scale-100"
+                         x-transition:leave="transition ease-in duration-75"
+                         x-transition:leave-start="transform opacity-100 scale-100"
+                         x-transition:leave-end="transform opacity-0 scale-95"
+                         class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                        <div class="py-2">
+                            <a href="/accounts/profile/" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                <i class="fas fa-user mr-3 text-gray-600"></i>
+                                My Profile
+                            </a>
+                            <a href="/dashboard/" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                <i class="fas fa-home mr-3 text-blue-600"></i>
+                                Main Dashboard
+                            </a>
+                            <div class="border-t border-gray-100 my-1"></div>
+                            <a href="/accounts/logout/" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                <i class="fas fa-sign-out-alt mr-3 text-red-600"></i>
+                                Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div x-show="sidebarOpen" 
+         @click="sidebarOpen = false" 
+         class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+         x-transition:enter="transition-opacity ease-linear duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity ease-linear duration-300"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"></div>
+
+    <!-- Sidebar Navigation -->
+    <nav class="fixed top-16 left-0 z-50 w-64 h-screen bg-white border-r border-gray-200 sidebar-transition transform lg:translate-x-0"
+         :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
+        <div class="flex flex-col h-full">
+            <!-- Navigation Links -->
+            <div class="flex-1 overflow-y-auto px-4 py-6 space-y-1">
+                <!-- Main Navigation -->
+                <div class="space-y-1 mb-8">
+                    <h3 class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Navigation</h3>
+                    <a href="{% url 'cflows:index' %}" 
+                       class="{% if request.resolver_match.url_name == 'index' %}bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500{% else %}text-gray-700 hover:bg-indigo-50 hover:text-indigo-700{% endif %} flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200">
+                        <i class="fas fa-tachometer-alt mr-3 text-indigo-500"></i>
+                        Dashboard
+                    </a>
+                    <a href="{% url 'cflows:workflow_list' %}" 
+                       class="{% if 'workflow' in request.resolver_match.url_name %}bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500{% else %}text-gray-700 hover:bg-indigo-50 hover:text-indigo-700{% endif %} flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200">
+                        <i class="fas fa-sitemap mr-3 text-blue-500"></i>
+                        Workflows
+                    </a>
+                    <a href="{% url 'cflows:work_items_list' %}" 
+                       class="{% if 'work_item' in request.resolver_match.url_name %}bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500{% else %}text-gray-700 hover:bg-indigo-50 hover:text-indigo-700{% endif %} flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200">
+                        <i class="fas fa-tasks mr-3 text-green-500"></i>
+                        Work Items
+                    </a>
+                    <a href="{% url 'cflows:team_bookings_list' %}" 
+                       class="{% if 'booking' in request.resolver_match.url_name %}bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500{% else %}text-gray-700 hover:bg-indigo-50 hover:text-indigo-700{% endif %} flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200">
+                        <i class="fas fa-calendar-check mr-3 text-orange-500"></i>
+                        Team Bookings
+                    </a>
+                    <a href="{% url 'cflows:calendar' %}" 
+                       class="{% if 'calendar' in request.resolver_match.url_name %}bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500{% else %}text-gray-700 hover:bg-indigo-50 hover:text-indigo-700{% endif %} flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200">
+                        <i class="fas fa-calendar mr-3 text-purple-500"></i>
+                        Calendar
+                    </a>
+                </div>
+
+                <!-- Quick Actions -->
+                {% if profile and profile.can_create_workflows %}
+                <div class="space-y-1 mb-8">
+                    <h3 class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Quick Create</h3>
+                    <a href="{% url 'cflows:create_workflow' %}" 
+                       class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition-colors duration-200">
+                        <i class="fas fa-stream mr-3 text-blue-600"></i>
+                        New Workflow
+                    </a>
+                    <a href="{% url 'cflows:create_advanced_workflow' %}" 
+                       class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors duration-200">
+                        <i class="fas fa-cogs mr-3 text-indigo-500"></i>
+                        Advanced Workflow
+                    </a>
+                    <a href="{% url 'cflows:create_custom_field' %}" 
+                       class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-purple-50 hover:text-purple-700 transition-colors duration-200">
+                        <i class="fas fa-list-alt mr-3 text-purple-600"></i>
+                        Custom Field
+                    </a>
+                    <a href="{% url 'cflows:create_team' %}" 
+                       class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-green-50 hover:text-green-700 transition-colors duration-200">
+                        <i class="fas fa-users mr-3 text-green-600"></i>
+                        New Team
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- Management -->
+                <div class="space-y-1 mb-8">
+                    <h3 class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Management</h3>
+                    <a href="{% url 'cflows:select_workflow_for_transitions' %}" 
+                       class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-orange-50 hover:text-orange-700 transition-colors duration-200">
+                        <i class="fas fa-route mr-3 text-orange-600"></i>
+                        Manage Transitions
+                    </a>
+                    <a href="{% url 'cflows:select_workflow_for_bulk_transitions' %}" 
+                       class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-orange-50 hover:text-orange-700 transition-colors duration-200">
+                        <i class="fas fa-layer-group mr-3 text-orange-500"></i>
+                        Bulk Transitions
+                    </a>
+                    <a href="/admin/core/calendarevent/add/" 
+                       class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition-colors duration-200">
+                        <i class="fas fa-calendar-plus mr-3 text-blue-600"></i>
+                        New Event
+                    </a>
+                </div>
+            </div>
+
+            <!-- Services Shortcut -->
+            {% if profile %}
+            <div class="px-4 py-4 border-t border-gray-200">
+                <button onclick="openServicesModal()" 
+                        class="w-full group relative flex items-center px-3 py-4 text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5">
+                    <div class="absolute inset-0 bg-gradient-to-r from-purple-400 to-purple-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                    <div class="relative flex items-center w-full">
+                        <div class="flex items-center justify-center w-10 h-10 bg-white bg-opacity-20 rounded-lg mr-3">
+                            <i class="fas fa-th-large text-white text-lg"></i>
+                        </div>
+                        <div class="flex-1 text-left">
+                            <div class="text-sm font-semibold">All Services</div>
+                            <div class="text-xs text-purple-200">Access your tools</div>
+                        </div>
+                        <i class="fas fa-arrow-right text-purple-200 group-hover:text-white transition-colors duration-200"></i>
+                    </div>
+                </button>
+            </div>
+            {% endif %}
+
+            <!-- Organization Info -->
+            {% if profile %}
+            <div class="px-4 py-4 border-t border-gray-200">
+                <div class="flex items-center space-x-3">
+                    <div class="flex-shrink-0">
+                        <div class="h-8 w-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-building text-indigo-600 text-sm"></i>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-gray-900 truncate">{{ profile.organization.name }}</p>
+                        <p class="text-xs text-gray-500">CFlows v1.0.0</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <div class="lg:ml-64">
+        <!-- Flash Messages -->
+        {% if messages %}
+            <div class="px-4 sm:px-6 lg:px-8 pt-4">
+                {% for message in messages %}
+                    <div class="mb-4 p-4 rounded-lg shadow-sm {% if message.tags == 'error' %}bg-red-50 border border-red-200 text-red-800{% elif message.tags == 'warning' %}bg-yellow-50 border border-yellow-200 text-yellow-800{% elif message.tags == 'success' %}bg-green-50 border border-green-200 text-green-800{% else %}bg-blue-50 border border-blue-200 text-blue-800{% endif %}">
+                        <div class="flex items-center">
+                            <i class="fas {% if message.tags == 'error' %}fa-exclamation-circle{% elif message.tags == 'warning' %}fa-exclamation-triangle{% elif message.tags == 'success' %}fa-check-circle{% else %}fa-info-circle{% endif %} mr-2"></i>
+                            {{ message }}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <!-- Page Content -->
+        <main class="px-4 sm:px-6 lg:px-8 py-6">
+            {% block content %}{% endblock %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-white border-t mt-12">
+            <div class="px-4 sm:px-6 lg:px-8 py-6">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-sm text-gray-600">
+                            CFlows v1.0.0 - Workflow Management System
+                        </div>
+                        {% if profile %}
+                        <div class="text-sm text-gray-400">
+                            {{ profile.organization.name }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center space-x-4 text-sm text-gray-600">
+                        <a href="/dashboard/" class="hover:text-indigo-600">Main Dashboard</a>
+                        {% if profile.has_staff_panel_access or profile.is_organization_admin %}
+                        <a href="/admin/" class="hover:text-indigo-600">Admin</a>
+                        {% endif %}
+                        <a href="#" class="hover:text-indigo-600">Help</a>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Services Modal -->
+    <div id="servicesModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between pb-4 border-b border-gray-200">
+                    <div class="flex items-center">
+                        <i class="fas fa-th-large text-purple-600 text-2xl mr-3"></i>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">All Services</h3>
+                            <p class="text-sm text-gray-500">Access your organization's services and tools</p>
+                        </div>
+                    </div>
+                    <button onclick="closeServicesModal()" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+
+                <!-- Services Grid -->
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Core Services -->
+                    <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg border border-blue-200 hover:shadow-md transition-shadow duration-200">
+                        <div class="flex items-center mb-3">
+                            <i class="fas fa-home text-blue-600 text-2xl mr-3"></i>
+                            <div>
+                                <h4 class="text-lg font-semibold text-blue-900">Core</h4>
+                                <p class="text-sm text-blue-600">Main Dashboard</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-blue-700 mb-4">Organization overview and main controls</p>
+                        <a href="/" class="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors duration-200">
+                            <i class="fas fa-arrow-right mr-2"></i>
+                            Open Core
+                        </a>
+                    </div>
+
+                    <!-- CFlows Service (Current) -->
+                    <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 p-6 rounded-lg border border-indigo-200 hover:shadow-md transition-shadow duration-200">
+                        <div class="flex items-center mb-3">
+                            <i class="fas fa-project-diagram text-indigo-600 text-2xl mr-3"></i>
+                            <div>
+                                <h4 class="text-lg font-semibold text-indigo-900">CFlows</h4>
+                                <p class="text-sm text-indigo-600">Current Service</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-indigo-700 mb-4">Workflow management and task processing</p>
+                        <div class="inline-flex items-center px-3 py-2 bg-indigo-100 text-indigo-700 text-sm font-medium rounded border border-indigo-300">
+                            <i class="fas fa-check-circle mr-2"></i>
+                            You're here
+                        </div>
+                    </div>
+
+                    <!-- Scheduling Service -->
+                    <div class="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg border border-green-200 hover:shadow-md transition-shadow duration-200">
+                        <div class="flex items-center mb-3">
+                            <i class="fas fa-calendar-check text-green-600 text-2xl mr-3"></i>
+                            <div>
+                                <h4 class="text-lg font-semibold text-green-900">Scheduling</h4>
+                                <p class="text-sm text-green-600">Resource Management</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-green-700 mb-4">Resource scheduling and booking management</p>
+                        <a href="/services/scheduling/" class="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors duration-200">
+                            <i class="fas fa-arrow-right mr-2"></i>
+                            Open Scheduling
+                        </a>
+                    </div>
+
+                    <!-- Analytics Service -->
+                    <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-lg border border-orange-200 hover:shadow-md transition-shadow duration-200">
+                        <div class="flex items-center mb-3">
+                            <i class="fas fa-chart-line text-orange-600 text-2xl mr-3"></i>
+                            <div>
+                                <h4 class="text-lg font-semibold text-orange-900">Analytics</h4>
+                                <p class="text-sm text-orange-600">Data & Reporting</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-orange-700 mb-4">Business intelligence and data visualization</p>
+                        <a href="/analytics/" class="inline-flex items-center px-3 py-2 bg-orange-600 text-white text-sm font-medium rounded hover:bg-orange-700 transition-colors duration-200">
+                            <i class="fas fa-arrow-right mr-2"></i>
+                            Open Analytics
+                        </a>
+                    </div>
+
+                    <!-- API Service -->
+                    <div class="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200">
+                        <div class="flex items-center mb-3">
+                            <i class="fas fa-code text-gray-600 text-2xl mr-3"></i>
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900">API</h4>
+                                <p class="text-sm text-gray-600">Developer Tools</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-700 mb-4">API documentation and developer resources</p>
+                        <a href="/api/" class="inline-flex items-center px-3 py-2 bg-gray-600 text-white text-sm font-medium rounded hover:bg-gray-700 transition-colors duration-200">
+                            <i class="fas fa-arrow-right mr-2"></i>
+                            Open API
+                        </a>
+                    </div>
+
+                    <!-- Account Management -->
+                    <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg border border-purple-200 hover:shadow-md transition-shadow duration-200">
+                        <div class="flex items-center mb-3">
+                            <i class="fas fa-users text-purple-600 text-2xl mr-3"></i>
+                            <div>
+                                <h4 class="text-lg font-semibold text-purple-900">Accounts</h4>
+                                <p class="text-sm text-purple-600">User Management</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-purple-700 mb-4">User accounts, roles, and permissions</p>
+                        <a href="/accounts/" class="inline-flex items-center px-3 py-2 bg-purple-600 text-white text-sm font-medium rounded hover:bg-purple-700 transition-colors duration-200">
+                            <i class="fas fa-arrow-right mr-2"></i>
+                            Open Accounts
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="mt-8 pt-6 border-t border-gray-200">
+                    <h4 class="text-sm font-semibold text-gray-700 mb-4">Quick Actions</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <button class="flex flex-col items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-stream text-indigo-600 text-xl mb-2"></i>
+                            <span class="text-xs text-gray-700">New Workflow</span>
+                        </button>
+                        <button class="flex flex-col items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-calendar-plus text-green-600 text-xl mb-2"></i>
+                            <span class="text-xs text-gray-700">Schedule</span>
+                        </button>
+                        <button class="flex flex-col items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-chart-bar text-orange-600 text-xl mb-2"></i>
+                            <span class="text-xs text-gray-700">Reports</span>
+                        </button>
+                        <button class="flex flex-col items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-cog text-gray-600 text-xl mb-2"></i>
+                            <span class="text-xs text-gray-700">Settings</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openServicesModal() {
+            document.getElementById('servicesModal').classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+        }
+
+        function closeServicesModal() {
+            document.getElementById('servicesModal').classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('servicesModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeServicesModal();
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && !document.getElementById('servicesModal').classList.contains('hidden')) {
+                closeServicesModal();
+            }
+        });
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,61 @@
+{% extends 'cflows/cflows_base.html' %}
+
+{% block title %}Teams - CFlows{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Page Header -->
+    <div class="sm:flex sm:items-center sm:justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Teams</h1>
+            <p class="mt-2 text-sm text-gray-700">
+                Manage your organization's teams and their members
+            </p>
+        </div>
+        {% if profile.is_organization_admin or profile.has_staff_panel_access %}
+        <div class="mt-4 sm:mt-0 flex gap-3">
+            <a href="{% url 'cflows:create_team' %}" 
+               class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                Create Team
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Teams Hierarchy -->
+    {% if hierarchical_teams %}
+    <div class="space-y-6">
+        <!-- Summary Stats -->
+        <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <div class="flex items-center justify-between text-sm text-gray-600">
+                <span><strong>{{ total_teams }}</strong> total teams</span>
+                <span><strong>{{ top_level_teams_count }}</strong> top-level teams</span>
+            </div>
+        </div>
+        
+        <!-- Hierarchical Team Display -->
+        {% for team_data in hierarchical_teams %}
+            {% include 'cflows/team_tree_item.html' with team_data=team_data level=0 %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-12">
+        <div class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-users text-gray-400 text-2xl"></i>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No teams yet</h3>
+        <p class="text-gray-500 mb-6">Get started by creating your first team.</p>
+        {% if profile.is_organization_admin or profile.has_staff_panel_access %}
+        <a href="{% url 'cflows:create_team' %}" 
+           class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+            <i class="fas fa-plus mr-2"></i>
+            Create Team
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
