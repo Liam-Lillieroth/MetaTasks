@@ -16,7 +16,7 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY . /app
 RUN chmod +x /app/entrypoint.sh
 
-ENV DJANGO_SETTINGS_MODULE=core.settings
+ENV DJANGO_SETTINGS_MODULE=mediap.settings
 EXPOSE 8000
 
 
