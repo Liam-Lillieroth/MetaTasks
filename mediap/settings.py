@@ -152,14 +152,10 @@ WSGI_APPLICATION = 'mediap.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='mediap'),
-        'USER': config('DB_USER', default='mediap'),
-        'PASSWORD': config('DB_PASSWORD', default='mediap'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
-    }
+    'default': dj_database_url.config(
+        conn_max_age=600,
+        ssl_require=False
+    )
 }
 
 # Fallback to SQLite for development if PostgreSQL is not available
