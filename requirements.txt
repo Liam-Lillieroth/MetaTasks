@@ -4,6 +4,7 @@ djangorestframework>=3.16.0
 
 # Database
 psycopg2-binary>=2.9.0
+dj-database-url==3.0.1
 
 # Authentication & Authorization
 django-guardian>=3.1.0
