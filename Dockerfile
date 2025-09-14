@@ -1,5 +1,4 @@
-# syntax=docker/dockerfile:1
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -7,23 +6,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps (psycopg2, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    netcat-openbsd \
+    netcat-openbsd build-essential curl \
   && rm -rf /var/lib/apt/lists/*
 
-# Install deps
 COPY requirements.txt /app/requirements.txt
-RUN pip install -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy project
 COPY . /app
+RUN chmod +x /app/entrypoint.sh
 
-# Entrypoint runs migrations and collectstatic
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
+ENV DJANGO_SETTINGS_MODULE=core.settings
 EXPOSE 8000
-ENTRYPOINT ["/entrypoint.sh"]
+
+
+
+CMD ["./entrypoint.sh"]
