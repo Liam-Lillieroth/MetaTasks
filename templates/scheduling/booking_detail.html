@@ -71,14 +71,14 @@
                 </form>
             {% endif %}
             
-            {% if booking.status == 'confirmed' or booking.status == 'in_progress' %}
+            {% if booking.status == 'confirmed' or booking.status == 'in_progress' or booking.status == 'pending' and booking.custom_data.work_item_id %}
                 <button onclick="showCompleteModal()" class="action-btn action-btn-primary">
                     <i class="fas fa-check-circle mr-2"></i>
                     Complete
                 </button>
             {% endif %}
             
-            {% if booking.status not in 'completed,cancelled' %}
+            {% if booking.status != 'completed' and booking.status != 'cancelled' %}
                 <button onclick="showCancelModal()" class="action-btn action-btn-danger">
                     <i class="fas fa-times mr-2"></i>
                     Cancel
@@ -191,7 +191,7 @@
                             <dt class="text-sm font-medium text-gray-500">Work Item</dt>
                             <dd class="mt-1 text-sm font-semibold text-gray-900">
                                 {% if booking.custom_data.work_item_title %}
-                                    <a href="/services/cflows/work_items/{{ booking.custom_data.work_item_id }}/" 
+                                    <a href="{% url 'cflows:work_item_detail' booking.custom_data.work_item_id %}" 
                                        class="text-blue-600 hover:text-blue-800 hover:underline">
                                         <i class="fas fa-external-link-alt mr-1"></i>
                                         {{ booking.custom_data.work_item_title }}

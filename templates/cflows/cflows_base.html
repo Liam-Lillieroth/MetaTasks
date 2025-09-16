@@ -80,6 +80,50 @@
                 </a>
                 {% endif %}
                 
+                <!-- Notifications Bell -->
+                <div class="relative" x-data="{ open: false, unreadCount: 0 }" x-init="fetchNotificationCount()">
+                    <button @click="open = !open; if(open) markNotificationsAsRead()" 
+                            class="relative text-indigo-100 hover:bg-white hover:bg-opacity-10 p-2 rounded-lg transition-all duration-200"
+                            title="Notifications">
+                        <i class="fas fa-bell text-lg"></i>
+                        <span x-show="unreadCount > 0" 
+                              x-text="unreadCount > 99 ? '99+' : unreadCount"
+                              class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center min-w-[20px]"></span>
+                    </button>
+                    
+                    <div x-show="open" 
+                         @click.away="open = false"
+                         x-transition:enter="transition ease-out duration-100"
+                         x-transition:enter-start="transform opacity-0 scale-95"
+                         x-transition:enter-end="transform opacity-100 scale-100"
+                         x-transition:leave="transition ease-in duration-75"
+                         x-transition:leave-start="transform opacity-100 scale-100"
+                         x-transition:leave-end="transform opacity-0 scale-95"
+                         class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
+                        
+                        <div class="p-4 border-b">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-lg font-medium text-gray-900">Notifications</h3>
+                                <a href="/core/notifications/" class="text-sm text-indigo-600 hover:text-indigo-900">View All</a>
+                            </div>
+                        </div>
+                        
+                        <div id="notification-list" class="max-h-64 overflow-y-auto">
+                            <div class="p-4 text-center text-gray-500">
+                                <i class="fas fa-spinner fa-spin mb-2"></i>
+                                <p>Loading notifications...</p>
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 border-t bg-gray-50 rounded-b-lg">
+                            <a href="/core/notifications/" class="text-sm text-indigo-600 hover:text-indigo-900">
+                                <i class="fas fa-cog mr-1"></i>
+                                Manage preferences
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- User Profile -->
                 <div class="relative" x-data="{ open: false }">
                     <button @click="open = !open" class="flex items-center text-indigo-100 hover:bg-white hover:bg-opacity-10 px-3 py-2 rounded-lg transition-all duration-200">
@@ -471,6 +515,150 @@
             if (e.key === 'Escape' && !document.getElementById('servicesModal').classList.contains('hidden')) {
                 closeServicesModal();
             }
+        });
+
+        // Notification Bell Functions
+        function fetchNotificationCount() {
+            fetch('/core/notifications/api/', {
+                credentials: 'include',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    this.unreadCount = data.unread_count || 0;
+                })
+                .catch(error => {
+                    console.log('Error fetching notification count:', error);
+                    this.unreadCount = 0;
+                });
+        }
+
+        function fetchNotifications() {
+            fetch('/core/notifications/api/', {
+                credentials: 'include',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const listElement = document.getElementById('notification-list');
+                    if (data.notifications && data.notifications.length > 0) {
+                        listElement.innerHTML = data.notifications.map(notification => `
+                            <div class="p-4 border-b border-gray-100 hover:bg-gray-50 ${!notification.is_read ? 'bg-blue-50' : ''}">
+                                <div class="flex items-start">
+                                    <div class="flex-shrink-0">
+                                        <i class="fas fa-${getNotificationIcon(notification.type)} text-${getNotificationColor(notification.type)}-500"></i>
+                                    </div>
+                                    <div class="ml-3 flex-1">
+                                        <p class="text-sm font-medium text-gray-900">${notification.title}</p>
+                                        <p class="text-sm text-gray-500">${notification.message}</p>
+                                        <div class="mt-1 flex items-center justify-between">
+                                            <span class="text-xs text-gray-400">${formatDate(notification.created_at)}</span>
+                                            ${notification.action_url ? `<a href="${notification.action_url}" class="text-xs text-indigo-600 hover:text-indigo-900">${notification.action_text || 'View'}</a>` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('');
+                    } else {
+                        listElement.innerHTML = `
+                            <div class="p-8 text-center text-gray-500">
+                                <i class="fas fa-bell-slash text-3xl mb-2 text-gray-300"></i>
+                                <p>No notifications yet</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.log('Error fetching notifications:', error);
+                    document.getElementById('notification-list').innerHTML = `
+                        <div class="p-4 text-center text-red-500">
+                            <i class="fas fa-exclamation-triangle mb-2"></i>
+                            <p>Error loading notifications</p>
+                        </div>
+                    `;
+                });
+        }
+
+        function markNotificationsAsRead() {
+            // Note: The current API only shows unread notifications, so when we fetch them
+            // they are automatically "seen". We'd need a separate mark-as-read endpoint
+            // for now, just refresh the notification count
+            setTimeout(() => {
+                fetchNotificationCount.call(this);
+            }, 500);
+            
+            // Also fetch fresh notifications
+            setTimeout(() => fetchNotifications(), 100);
+        }
+
+        function getNotificationIcon(type) {
+            const icons = {
+                'info': 'info-circle',
+                'success': 'check-circle',
+                'warning': 'exclamation-triangle',
+                'error': 'times-circle'
+            };
+            return icons[type] || 'bell';
+        }
+
+        function getNotificationColor(type) {
+            const colors = {
+                'info': 'blue',
+                'success': 'green',
+                'warning': 'yellow',
+                'error': 'red'
+            };
+            return colors[type] || 'gray';
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffInSeconds = Math.floor((now - date) / 1000);
+            
+            if (diffInSeconds < 60) return 'Just now';
+            if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+            if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+            if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+            
+            return date.toLocaleDateString();
+        }
+
+        // Fetch notifications when dropdown opens
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('notifications', () => ({
+                open: false,
+                unreadCount: 0,
+                init() {
+                    this.fetchNotificationCount();
+                    // Refresh count every 30 seconds
+                    setInterval(() => this.fetchNotificationCount(), 30000);
+                },
+                fetchNotificationCount() {
+                    fetchNotificationCount.call(this);
+                },
+                toggle() {
+                    this.open = !this.open;
+                    if (this.open) {
+                        fetchNotifications();
+                        markNotificationsAsRead.call(this);
+                    }
+                }
+            }));
         });
     </script>
 

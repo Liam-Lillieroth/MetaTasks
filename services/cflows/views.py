@@ -22,6 +22,7 @@ from .forms import (
     WorkflowFieldConfigForm, SchedulingBookingForm
 )
 import json
+from django.views.decorators.http import require_GET
 
 
 def apply_workflow_template(workflow):
@@ -588,6 +589,67 @@ def work_item_detail(request, work_item_id):
                 comment.work_item = work_item
                 comment.author = profile
                 comment.save()
+                # Parse mentions and notify (mirror logic from attachment_views.add_comment)
+                try:
+                    from .mention_utils import parse_mentions
+                    from core.models import UserProfile as CoreUserProfile, Team as CoreTeam, Notification
+                    mentions = parse_mentions(comment.content)
+                    # Users
+                    if mentions['usernames']:
+                        mentioned_users = list(CoreUserProfile.objects.filter(
+                            organization=profile.organization,
+                            user__username__in=list(mentions['usernames'])
+                        ))
+                        if mentioned_users:
+                            comment.mentioned_users.set(mentioned_users)
+                    # Teams
+                    if mentions['team_names']:
+                        mentioned_teams = list(CoreTeam.objects.filter(
+                            organization=profile.organization,
+                            name__in=list(mentions['team_names'])
+                        ))
+                        if mentioned_teams:
+                            comment.mentioned_teams.set(mentioned_teams)
+                    # Notifications
+                    notified_user_ids = set()
+                    for u in getattr(comment, 'mentioned_users').all():
+                        if u.id != profile.id:
+                            notification = Notification.objects.create(
+                                recipient=u.user,
+                                title=f"You were mentioned on '{work_item.title}'",
+                                message=f"{profile.user.get_full_name() or profile.user.username} mentioned you in a comment.",
+                                notification_type='info',
+                                content_type='WorkItem',
+                                object_id=str(work_item.id),
+                                action_url=f"/services/cflows/work-items/{work_item.id}/",
+                                action_text='View Work Item'
+                            )
+                            # Trigger email notification
+                            from core.notification_views import send_notification_email
+                            send_notification_email(notification)
+                            notified_user_ids.add(u.id)
+                    for team in getattr(comment, 'mentioned_teams').all():
+                        for member in team.members.all():
+                            if member.id == profile.id:
+                                continue
+                            if member.id in notified_user_ids:
+                                continue
+                            notification = Notification.objects.create(
+                                recipient=member.user,
+                                title=f"Team mention on '{work_item.title}'",
+                                message=f"{profile.user.get_full_name() or profile.user.username} mentioned @team:{team.name} in a comment.",
+                                notification_type='info',
+                                content_type='WorkItem',
+                                object_id=str(work_item.id),
+                                action_url=f"/services/cflows/work-items/{work_item.id}/",
+                                action_text='View Work Item'
+                            )
+                            # Trigger email notification
+                            from core.notification_views import send_notification_email
+                            send_notification_email(notification)
+                            notified_user_ids.add(member.id)
+                except Exception:
+                    pass
                 messages.success(request, 'Comment added successfully!')
                 return redirect('cflows:work_item_detail', work_item_id=work_item.id)
     
@@ -722,13 +784,8 @@ def complete_booking(request, booking_id):
         booking.completed_by = profile
         booking.save()
 
-        if(
-            booking.source_service == 'cflows' and
-            booking.source_object_type.lower() == 'teambooking'
-        ):
-            from .integrations import get_service_integrations  # local import to avoid circulars
-            integration = get_service_integrations(booking.organization)
-            integration.mark_completed(request, [booking])
+        # Note: External integrations are handled via signals/scheduling integration.
+        # Removed stale direct import to non-existent module.
 
         # If linked to workflow step, progress the work item
         if booking.work_item and booking.workflow_step:
@@ -1504,6 +1561,52 @@ def select_workflow_for_bulk_transitions(request):
 
 @login_required
 @require_organization_access
+@require_GET
+def mention_suggestions(request):
+    """Return mention suggestions for users and teams in the current organization.
+    Query params: q (string)
+    """
+    profile = get_user_profile(request)
+    if not profile:
+        return JsonResponse({'success': False, 'error': 'No profile'}, status=403)
+    q = (request.GET.get('q') or '').strip()
+    users_qs = UserProfile.objects.filter(
+        organization=profile.organization,
+        user__is_active=True
+    ).select_related('user')
+    teams_qs = Team.objects.filter(
+        organization=profile.organization,
+        is_active=True
+    )
+    if q:
+        users_qs = users_qs.filter(
+            models.Q(user__username__icontains=q) |
+            models.Q(user__first_name__icontains=q) |
+            models.Q(user__last_name__icontains=q)
+        )
+        teams_qs = teams_qs.filter(name__icontains=q)
+    users = [
+        {
+            'type': 'user',
+            'id': up.id,
+            'username': up.user.username,
+            'name': up.user.get_full_name() or up.user.username
+        }
+        for up in users_qs.order_by('user__first_name', 'user__last_name')[:10]
+    ]
+    teams = [
+        {
+            'type': 'team',
+            'id': t.id,
+            'name': t.name
+        }
+        for t in teams_qs.order_by('name')[:10]
+    ]
+    return JsonResponse({'success': True, 'users': users, 'teams': teams})
+
+
+@login_required
+@require_organization_access
 def create_booking_from_work_item(request, work_item_id):
     """Create a booking from any work item (CFlows or Scheduling service)"""
     profile = get_user_profile(request)
@@ -1555,10 +1658,11 @@ def create_booking_from_work_item(request, work_item_id):
     scheduling_bookings = []
     try:
         from services.scheduling.models import BookingRequest
+        from django.db.models import Q
         scheduling_bookings = BookingRequest.objects.filter(
-            source_service='cflows',
-            source_object_type='WorkItem',
-            source_object_id=str(work_item.id)
+            Q(source_service='cflows', source_object_type='WorkItem', source_object_id=str(work_item.id)) |
+            Q(custom_data__work_item_id=work_item.id) |
+            Q(custom_data__work_item_id=str(work_item.id))
         ).select_related('resource')
     except ImportError:
         pass  # Scheduling service not available
@@ -1608,21 +1712,24 @@ def work_item_bookings_status(request, work_item_id):
     scheduling_data = []
     try:
         from services.scheduling.models import BookingRequest
+        from django.db.models import Q
         scheduling_bookings = BookingRequest.objects.filter(
-            source_service='cflows',
-            source_object_type='WorkItem',
-            source_object_id=str(work_item.id)
+            Q(source_service='cflows', source_object_type='WorkItem', source_object_id=str(work_item.id)) |
+            Q(custom_data__work_item_id=work_item.id) |
+            Q(custom_data__work_item_id=str(work_item.id))
         ).select_related('resource')
         
         for booking in scheduling_bookings:
             scheduling_data.append({
                 'id': booking.id,
+                'uuid': str(booking.uuid),
                 'title': booking.title,
                 'resource': booking.resource.name if booking.resource else 'No Resource',
                 'requested_start': booking.requested_start.isoformat(),
                 'requested_end': booking.requested_end.isoformat(),
                 'status': booking.status,
                 'view_url': f'/services/scheduling/bookings/{booking.id}/',
+                'complete_url': f'/services/scheduling/bookings/{booking.uuid}/complete/',
                 'type': 'scheduling'
             })
     except ImportError:
@@ -1661,17 +1768,14 @@ def work_item_booking_summary(request, work_item_id):
     scheduling_completed = 0
     try:
         from services.scheduling.models import BookingRequest
-        scheduling_total = BookingRequest.objects.filter(
-            source_service='cflows',
-            source_object_type='WorkItem',
-            source_object_id=str(work_item.id)
-        ).count()
-        scheduling_completed = BookingRequest.objects.filter(
-            source_service='cflows',
-            source_object_type='WorkItem',
-            source_object_id=str(work_item.id),
-            status='completed'
-        ).count()
+        from django.db.models import Q
+        scheduling_q = (
+            Q(source_service='cflows', source_object_type='WorkItem', source_object_id=str(work_item.id)) |
+            Q(custom_data__work_item_id=work_item.id) |
+            Q(custom_data__work_item_id=str(work_item.id))
+        )
+        scheduling_total = BookingRequest.objects.filter(scheduling_q).count()
+        scheduling_completed = BookingRequest.objects.filter(scheduling_q, status='completed').count()
     except ImportError:
         pass
     
@@ -1715,10 +1819,11 @@ def view_work_item_bookings(request, work_item_id):
     scheduling_bookings = []
     try:
         from services.scheduling.models import BookingRequest
+        from django.db.models import Q
         scheduling_bookings = BookingRequest.objects.filter(
-            source_service='cflows',
-            source_object_type='WorkItem',
-            source_object_id=str(work_item.id)
+            Q(source_service='cflows', source_object_type='WorkItem', source_object_id=str(work_item.id)) |
+            Q(custom_data__work_item_id=work_item.id) |
+            Q(custom_data__work_item_id=str(work_item.id))
         ).select_related('resource')
     except ImportError:
         pass  # Scheduling service not available

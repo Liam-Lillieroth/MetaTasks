@@ -671,6 +671,20 @@ class WorkItemComment(models.Model):
     
     # Threading
     parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
+
+    # Mentions
+    mentioned_users = models.ManyToManyField(
+        UserProfile,
+        blank=True,
+        related_name='mentioned_in_comments',
+        help_text="Users mentioned in this comment (@username)"
+    )
+    mentioned_teams = models.ManyToManyField(
+        Team,
+        blank=True,
+        related_name='mentioned_in_comments',
+        help_text="Teams mentioned in this comment (@team:Team Name)"
+    )
     
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
@@ -682,6 +696,23 @@ class WorkItemComment(models.Model):
     
     def __str__(self):
         return f"Comment on {self.work_item.title} by {self.author}"
+
+    def get_rendered_content(self):
+        """Return HTML-rendered content with mentions highlighted.
+        Falls back to plain content with line breaks if utilities unavailable.
+        """
+        try:
+            from .mention_utils import render_mentions
+            # Build lookup dicts for render function
+            users = {u.user.username: u for u in self.mentioned_users.all()}
+            teams = {t.name: t for t in self.mentioned_teams.all()}
+            return render_mentions(self.content, users, teams)
+        except Exception:
+            # Safe fallback: basic linebreaks conversion
+            from django.utils.html import conditional_escape
+            from django.utils.safestring import mark_safe
+            esc = conditional_escape(self.content or '')
+            return mark_safe(esc.replace('\n', '<br/>'))
 
 
 class WorkItemRevision(models.Model):

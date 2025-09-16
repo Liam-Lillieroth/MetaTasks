@@ -392,12 +392,15 @@
                 <div class="p-6">
                     <!-- Comment form -->
                     {% if comment_form %}
-                        <form method="post" class="mb-6">
+                        <form method="post" class="mb-6 relative" id="add-comment-form">
                             {% csrf_token %}
                             <input type="hidden" name="add_comment" value="1">
-                            <div class="mb-4">
+                            <div class="mb-2">
                                 {{ comment_form.content }}
                             </div>
+                            <p class="text-xs text-gray-500 mb-4">Tip: Mention users with @username and teams with @team:Team Name</p>
+                            <!-- Mentions suggestions dropdown - positioned above button -->
+                            <div id="mention-suggestions" class="hidden mb-4 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto"></div>
                             <button type="submit" 
                                     class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded text-sm transition-colors">
                                 <i class="fas fa-comment mr-2"></i>Add Comment
@@ -429,7 +432,7 @@
                                             </span>
                                         </div>
                                         <div class="mt-2 text-gray-700">
-                                            {{ comment.content|linebreaks }}
+                                            {{ comment.get_rendered_content|safe }}
                                         </div>
                                     </div>
                                 </div>
@@ -672,8 +675,11 @@ async function loadBookingStatus() {
     try {
         const response = await fetch(`{% url 'cflows:work_item_bookings_status' work_item.id %}`);
         const data = await response.json();
-        
-        if (data.total_bookings > 0) {
+        // Determine if there are any incomplete bookings (CFlows or Scheduling)
+        const hasIncomplete = (data.cflows_bookings || []).some(b => !b.is_completed)
+            || (data.scheduling_bookings || []).some(b => (b.status || '').toLowerCase() !== 'completed');
+
+        if (hasIncomplete) {
             displayBookingStatus(data);
         } else {
             hideBookingStatus();
@@ -685,9 +691,12 @@ async function loadBookingStatus() {
 
 function displayBookingStatus(data) {
     const container = document.getElementById('booking-status-container');
-    const hasBookings = data.cflows_bookings.length > 0 || data.scheduling_bookings.length > 0;
-    
-    if (!hasBookings) {
+    // Filter to only incomplete bookings
+    const cflowsIncomplete = (data.cflows_bookings || []).filter(b => !b.is_completed);
+    const schedulingIncomplete = (data.scheduling_bookings || []).filter(b => (b.status || '').toLowerCase() !== 'completed');
+    const totalIncomplete = cflowsIncomplete.length + schedulingIncomplete.length;
+
+    if (totalIncomplete === 0) {
         container.innerHTML = '';
         return;
     }
@@ -699,21 +708,21 @@ function displayBookingStatus(data) {
             </div>
             <div class="flex-1">
                 <p class="text-sm font-medium text-blue-800 mb-2">
-                    This work item has ${data.total_bookings} associated booking${data.total_bookings !== 1 ? 's' : ''}
+                    This work item has ${totalIncomplete} incomplete booking${totalIncomplete !== 1 ? 's' : ''}
                 </p>
     `;
     
     // CFlows bookings
-    if (data.cflows_bookings.length > 0) {
+    if (cflowsIncomplete.length > 0) {
         html += `
             <div class="mb-3">
-                <h4 class="text-xs font-semibold text-blue-700 mb-1">CFlows Bookings (${data.cflows_bookings.length})</h4>
+                <h4 class="text-xs font-semibold text-blue-700 mb-1">CFlows Bookings (${cflowsIncomplete.length})</h4>
                 <div class="space-y-1">
         `;
         
-        data.cflows_bookings.forEach(booking => {
-            const statusColor = booking.is_completed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
-            const statusText = booking.is_completed ? 'Completed' : 'Pending';
+        cflowsIncomplete.forEach(booking => {
+            const statusColor = 'bg-yellow-100 text-yellow-800';
+            const statusText = 'Pending';
             const startTime = new Date(booking.start_time).toLocaleDateString('en-US', {
                 month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
             });
@@ -740,14 +749,14 @@ function displayBookingStatus(data) {
     }
     
     // Scheduling service bookings
-    if (data.scheduling_bookings.length > 0) {
+    if (schedulingIncomplete.length > 0) {
         html += `
             <div class="mb-3">
-                <h4 class="text-xs font-semibold text-blue-700 mb-1">Scheduling Service Bookings (${data.scheduling_bookings.length})</h4>
+                <h4 class="text-xs font-semibold text-blue-700 mb-1">Scheduling Service Bookings (${schedulingIncomplete.length})</h4>
                 <div class="space-y-1">
         `;
         
-        data.scheduling_bookings.forEach(booking => {
+        schedulingIncomplete.forEach(booking => {
             let statusColor = 'bg-gray-100 text-gray-800';
             if (booking.status === 'completed') statusColor = 'bg-green-100 text-green-800';
             else if (booking.status === 'confirmed') statusColor = 'bg-blue-100 text-blue-800';
@@ -757,6 +766,8 @@ function displayBookingStatus(data) {
                 month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
             });
             
+            const canInlineComplete = (booking.status === 'confirmed' || booking.status === 'in_progress' || booking.status === 'pending') && booking.complete_url;
+
             html += `
                 <div class="flex items-center justify-between text-xs">
                     <div class="flex-1 min-w-0">
@@ -766,9 +777,17 @@ function displayBookingStatus(data) {
                         </a>
                         <span class="text-blue-600 ml-1">(${booking.resource} • ${startTime})</span>
                     </div>
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColor} ml-2">
-                        ${booking.status}
-                    </span>
+                    <div class="flex items-center space-x-2 ml-2">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColor}">
+                            ${booking.status}
+                        </span>
+                        ${canInlineComplete ? `
+                            <button class="inline-flex items-center px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs" 
+                                    onclick="inlineCompleteSchedulingBooking('${booking.complete_url}')">
+                                <i class="fas fa-check mr-1"></i>Complete
+                            </button>
+                        ` : ''}
+                    </div>
                 </div>
             `;
         });
@@ -804,13 +823,264 @@ function hideBookingStatus() {
 
 // Load booking status when page loads if we just created a booking
 document.addEventListener('DOMContentLoaded', function() {
+    // Always check for incomplete bookings on page load
+    loadBookingStatus();
+
+    // If we just created a booking, load status and clean the URL
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('booking_created') === '1') {
-        loadBookingStatus();
         // Remove the parameter from URL without reload
         const newUrl = window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);
     }
+});
+
+// Inline completion handler for Scheduling bookings
+async function inlineCompleteSchedulingBooking(completeUrl) {
+    try {
+        // Try to get CSRF token from cookie or any form on page
+        const getCookie = (name) => {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        };
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+        const resp = await fetch(completeUrl, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        const data = await resp.json();
+        if (resp.ok && data.success || data.requires_workflow_prompt) {
+            if (data.requires_workflow_prompt && data.prompt_url) {
+                // If workflow prompt is required, open in a new tab to preserve context
+                window.open(data.prompt_url, '_blank');
+            }
+            // Refresh the panel after a short delay to let completion persist
+            setTimeout(loadBookingStatus, 300);
+        } else {
+            console.error('Failed to complete booking', data);
+            alert(data.error || 'Failed to complete booking');
+        }
+    } catch (e) {
+        console.error('Error completing booking', e);
+        alert('Error completing booking');
+    }
+}
+
+// ---------------------------
+// Mentions autocomplete (@, @team:)
+// ---------------------------
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Mentions script loaded');
+    const form = document.getElementById('add-comment-form');
+    if (!form) return;
+    const textarea = form.querySelector('textarea[name="content"]');
+    if (!textarea) return;
+    const dropdown = document.getElementById('mention-suggestions');
+    if (!dropdown) return;
+    
+    let items = [];
+    let activeIndex = -1;
+    let anchorStart = -1; // index in textarea.value where current mention starts
+
+    function showDropdown(html) {
+        dropdown.innerHTML = html;
+        dropdown.classList.remove('hidden');
+        // Force the dropdown to appear in the right place with important styles
+        dropdown.style.cssText = 'display: block !important; position: static !important; background: white !important; border: 1px solid #d1d5db !important; border-radius: 0.375rem !important; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important; margin: 10px 0 !important; max-height: 12rem !important; overflow-y: auto !important; z-index: 50 !important;';
+        console.log('Dropdown shown with suggestions');
+    }
+
+    function hideDropdown() {
+        dropdown.classList.add('hidden');
+        dropdown.innerHTML = '';
+        items = [];
+        activeIndex = -1;
+        anchorStart = -1;
+    }
+
+    function getCurrentMention() {
+        const pos = textarea.selectionStart || 0;
+        const text = textarea.value.substring(0, pos);
+        console.log('getCurrentMention - text before cursor:', JSON.stringify(text), 'pos:', pos);
+        // Find last '@' that starts a mention (start or whitespace before)
+        const atIndex = Math.max(text.lastIndexOf('\n@'), text.lastIndexOf(' @'), text.lastIndexOf('@'));
+        console.log('getCurrentMention - atIndex:', atIndex);
+        if (atIndex === -1) return null;
+        // Ensure it's at start or preceded by whitespace/newline
+        if (atIndex > 0 && !/\s/.test(text[atIndex - 1])) {
+            console.log('getCurrentMention - @ not at start or after whitespace');
+            return null;
+        }
+        const fragment = text.substring(atIndex, pos);
+        console.log('getCurrentMention - fragment:', JSON.stringify(fragment));
+        // Two patterns: @username... OR @team:partial name...
+        const teamMatch = fragment.match(/^@team:([^@\n\r]*)$/);
+        if (teamMatch) {
+            console.log('getCurrentMention - team match:', teamMatch[1]);
+            return { type: 'team', query: (teamMatch[1] || '').trim(), start: atIndex };
+        }
+        const userMatch = fragment.match(/^@([A-Za-z0-9_\.-]*)$/);
+        if (userMatch) {
+            console.log('getCurrentMention - user match:', userMatch[1]);
+            return { type: 'user', query: userMatch[1] || '', start: atIndex };
+        }
+        console.log('getCurrentMention - no match found');
+        return null;
+    }
+
+    async function fetchSuggestions(q) {
+        console.log('fetchSuggestions called with:', JSON.stringify(q));
+        try {
+            const url = `{% url 'cflows:api_mention_suggestions' %}?q=` + encodeURIComponent(q || '');
+            console.log('Fetching from URL:', url);
+            const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            console.log('Response status:', resp.status);
+            if (!resp.ok) return { users: [], teams: [] };
+            const data = await resp.json();
+            console.log('API response data:', data);
+            return { users: data.users || [], teams: data.teams || [] };
+        } catch (error) {
+            console.error('fetchSuggestions error:', error);
+            return { users: [], teams: [] };
+        }
+    }
+
+    function renderItems(matchType, suggestions) {
+        console.log('renderItems called with type:', matchType, 'suggestions:', suggestions);
+        const list = [];
+        items = [];
+        activeIndex = -1;
+        // If user-type mention, show users first; if team-type, show teams first.
+        const users = suggestions.users || [];
+        const teams = suggestions.teams || [];
+        console.log('Users count:', users.length, 'Teams count:', teams.length);
+        if (matchType === 'user') {
+            if (users.length) {
+                list.push('<div class="px-3 py-1 text-xs text-gray-500">Users</div>');
+                users.forEach((u, idx) => {
+                    items.push({ type: 'user', value: u.username, label: u.name || u.username });
+                    list.push(`<div class="px-3 py-2 cursor-pointer hover:bg-gray-50" data-index="${items.length - 1}">` +
+                        `<i class="fas fa-user mr-2 text-gray-400"></i>` +
+                        `<span class="font-medium text-gray-900">@${u.username}</span>` +
+                        (u.name && u.name !== u.username ? ` <span class=\"text-gray-500\">(${u.name})</span>` : '') +
+                        `</div>`);
+                });
+            }
+            if (teams.length) {
+                list.push('<div class="px-3 py-1 text-xs text-gray-500 border-t">Teams</div>');
+                teams.forEach((t) => {
+                    items.push({ type: 'team', value: t.name, label: t.name });
+                    list.push(`<div class="px-3 py-2 cursor-pointer hover:bg-gray-50" data-index="${items.length - 1}">` +
+                        `<i class="fas fa-users mr-2 text-gray-400"></i>` +
+                        `<span class="font-medium text-gray-900">@team:${t.name}</span>` +
+                        `</div>`);
+                });
+            }
+        } else {
+            if (teams.length) {
+                list.push('<div class="px-3 py-1 text-xs text-gray-500">Teams</div>');
+                teams.forEach((t) => {
+                    items.push({ type: 'team', value: t.name, label: t.name });
+                    list.push(`<div class="px-3 py-2 cursor-pointer hover:bg-gray-50" data-index="${items.length - 1}">` +
+                        `<i class="fas fa-users mr-2 text-gray-400"></i>` +
+                        `<span class="font-medium text-gray-900">@team:${t.name}</span>` +
+                        `</div>`);
+                });
+            }
+            if (users.length) {
+                list.push('<div class="px-3 py-1 text-xs text-gray-500 border-t">Users</div>');
+                users.forEach((u) => {
+                    items.push({ type: 'user', value: u.username, label: u.name || u.username });
+                    list.push(`<div class="px-3 py-2 cursor-pointer hover:bg-gray-50" data-index="${items.length - 1}">` +
+                        `<i class="fas fa-user mr-2 text-gray-400"></i>` +
+                        `<span class="font-medium text-gray-900">@${u.username}</span>` +
+                        (u.name && u.name !== u.username ? ` <span class=\"text-gray-500\">(${u.name})</span>` : '') +
+                        `</div>`);
+                });
+            }
+        }
+        if (!items.length) {
+            list.push('<div class="px-3 py-2 text-sm text-gray-500">No matches</div>');
+        }
+        list.push('<div class="px-3 py-1 text-[10px] text-gray-400 border-t">Use ↑/↓ and Enter to select</div>');
+        showDropdown(list.join(''));
+    }
+
+    function replaceCurrentMention(selection) {
+        if (anchorStart < 0) return;
+        const pos = textarea.selectionStart || 0;
+        const before = textarea.value.substring(0, anchorStart);
+        const after = textarea.value.substring(pos);
+        const token = selection.type === 'team' ? `@team:${selection.value} ` : `@${selection.value} `;
+        textarea.value = before + token + after;
+        const newCaret = before.length + token.length;
+        textarea.setSelectionRange(newCaret, newCaret);
+        hideDropdown();
+        textarea.focus();
+    }
+
+    dropdown.addEventListener('mousedown', (e) => {
+        const el = e.target.closest('[data-index]');
+        if (!el) return;
+        const idx = parseInt(el.getAttribute('data-index'), 10);
+        if (Number.isInteger(idx) && idx >= 0 && idx < items.length) {
+            e.preventDefault();
+            replaceCurrentMention(items[idx]);
+        }
+    });
+
+    textarea.addEventListener('keydown', (e) => {
+        if (dropdown.classList.contains('hidden')) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!items.length) return;
+            activeIndex = (activeIndex + 1) % items.length;
+            highlightActive();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!items.length) return;
+            activeIndex = (activeIndex - 1 + items.length) % items.length;
+            highlightActive();
+        } else if (e.key === 'Enter') {
+            if (activeIndex >= 0 && activeIndex < items.length) {
+                e.preventDefault();
+                replaceCurrentMention(items[activeIndex]);
+            }
+        } else if (e.key === 'Escape') {
+            hideDropdown();
+        }
+    });
+
+    function highlightActive() {
+        const nodes = dropdown.querySelectorAll('[data-index]');
+        nodes.forEach(n => n.classList.remove('bg-gray-100'));
+        const active = dropdown.querySelector(`[data-index="${activeIndex}"]`);
+        if (active) active.classList.add('bg-gray-100');
+    }
+
+    let debounceTimer = null;
+    textarea.addEventListener('input', () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+            const mention = getCurrentMention();
+            if (!mention) { 
+                hideDropdown(); 
+                return; 
+            }
+            anchorStart = mention.start;
+            const suggestions = await fetchSuggestions(mention.query || '');
+            renderItems(mention.type, suggestions);
+        }, 120);
+    });
+
+    textarea.addEventListener('blur', () => {
+        // Delay to allow click selection
+        setTimeout(() => hideDropdown(), 150);
+    });
 });
 </script>
 {% endblock %}

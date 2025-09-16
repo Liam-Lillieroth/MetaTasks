@@ -8,6 +8,9 @@
     <!-- TailwindCSS CDN for development -->
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <!-- Alpine.js CDN -->
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
@@ -39,6 +42,30 @@
                 </div>
                 <div class="flex items-center space-x-4">
                     {% if user.is_authenticated %}
+                        <!-- Notification Bell -->
+                        <div class="relative" id="notificationDropdown">
+                            <button onclick="toggleNotifications()" 
+                                    class="relative p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:text-gray-500 transition-colors">
+                                <i class="fas fa-bell text-lg"></i>
+                                <span id="notificationBadge" class="hidden absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-400 ring-2 ring-white"></span>
+                            </button>
+                            
+                            <!-- Dropdown -->
+                            <div id="notificationPanel" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                                <div class="p-4 border-b border-gray-200">
+                                    <div class="flex items-center justify-between">
+                                        <h3 class="text-lg font-medium text-gray-900">Notifications</h3>
+                                        <a href="{% url 'core:notification_center' %}" class="text-sm text-purple-600 hover:text-purple-800">View All</a>
+                                    </div>
+                                </div>
+                                <div id="notificationList" class="max-h-64 overflow-y-auto">
+                                    <div class="p-4 text-center text-gray-500">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <!-- Services Button -->
                         <button onclick="openServicesModal()" 
                                 class="relative group flex items-center px-3 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5">
@@ -302,6 +329,145 @@
                 closeServicesModal();
             }
         });
+
+        // Notification Bell Functions
+        let notificationPanelOpen = false;
+
+        function toggleNotifications() {
+            const panel = document.getElementById('notificationPanel');
+            const badge = document.getElementById('notificationBadge');
+            
+            if (!notificationPanelOpen) {
+                panel.classList.remove('hidden');
+                loadNotifications();
+                notificationPanelOpen = true;
+                
+                // Hide badge when opening
+                if (badge && !badge.classList.contains('hidden')) {
+                    badge.classList.add('hidden');
+                }
+            } else {
+                panel.classList.add('hidden');
+                notificationPanelOpen = false;
+            }
+        }
+
+        function loadNotifications() {
+            const notificationList = document.getElementById('notificationList');
+            
+            fetch('/core/notifications/api/?limit=5', {
+                credentials: 'include',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.notifications && data.notifications.length > 0) {
+                        let html = '';
+                        data.notifications.forEach(notification => {
+                            const timeAgo = getTimeAgo(new Date(notification.created_at));
+                            const readClass = notification.is_read ? 'bg-gray-50' : 'bg-blue-50';
+                            
+                            html += `
+                                <div class="p-3 border-b border-gray-100 ${readClass} hover:bg-gray-100 transition-colors">
+                                    <div class="flex items-start space-x-3">
+                                        <div class="flex-shrink-0">
+                                            <i class="fas fa-comment text-purple-500"></i>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm text-gray-900">${notification.message}</p>
+                                            <p class="text-xs text-gray-500 mt-1">${timeAgo}</p>
+                                        </div>
+                                        ${!notification.is_read ? '<div class="flex-shrink-0"><div class="w-2 h-2 bg-blue-400 rounded-full"></div></div>' : ''}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        notificationList.innerHTML = html;
+                    } else {
+                        notificationList.innerHTML = `
+                            <div class="p-4 text-center text-gray-500">
+                                <i class="fas fa-inbox text-2xl mb-2"></i>
+                                <p>No notifications</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading notifications:', error);
+                    notificationList.innerHTML = `
+                        <div class="p-4 text-center text-red-500">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Error loading notifications</p>
+                        </div>
+                    `;
+                });
+        }
+
+        function getTimeAgo(date) {
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes}m ago`;
+            if (hours < 24) return `${hours}h ago`;
+            return `${days}d ago`;
+        }
+
+        function checkUnreadNotifications() {
+            fetch('/core/notifications/api/?unread_count=true', {
+                credentials: 'include',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const badge = document.getElementById('notificationBadge');
+                    if (data.unread_count > 0) {
+                        badge.classList.remove('hidden');
+                    } else {
+                        badge.classList.add('hidden');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking notifications:', error);
+                });
+        }
+
+        // Close notification panel when clicking outside
+        document.addEventListener('click', function(e) {
+            const dropdown = document.getElementById('notificationDropdown');
+            const panel = document.getElementById('notificationPanel');
+            
+            if (notificationPanelOpen && dropdown && !dropdown.contains(e.target)) {
+                panel.classList.add('hidden');
+                notificationPanelOpen = false;
+            }
+        });
+
+        // Check for unread notifications on page load and periodically
+        {% if user.is_authenticated %}
+        document.addEventListener('DOMContentLoaded', function() {
+            checkUnreadNotifications();
+            // Check every 30 seconds
+            setInterval(checkUnreadNotifications, 30000);
+        });
+        {% endif %}
     </script>
     {% endif %}
 

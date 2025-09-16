@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block title %}Notification Preferences{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-6 px-4">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">Notification Preferences</h1>
+        <p class="text-gray-600 mt-1">Manage how you receive notifications from MetaTask</p>
+    </div>
+    
+    <form method="post" class="bg-white shadow rounded-lg p-6">
+        {% csrf_token %}
+        
+        <div class="space-y-6">
+            <!-- Email Notifications -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Email Notifications</h3>
+                
+                <div class="space-y-4">
+                    <div class="flex items-center">
+                        <input id="email_notifications" 
+                               name="email_notifications" 
+                               type="checkbox" 
+                               {% if profile.email_notifications %}checked{% endif %}
+                               class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                        <label for="email_notifications" class="ml-3 block text-sm font-medium text-gray-700">
+                            Send email notifications
+                        </label>
+                    </div>
+                    <p class="text-sm text-gray-500 ml-7">
+                        Receive email notifications for mentions, assignments, and other important updates.
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Desktop Notifications -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Desktop Notifications</h3>
+                
+                <div class="space-y-4">
+                    <div class="flex items-center">
+                        <input id="desktop_notifications" 
+                               name="desktop_notifications" 
+                               type="checkbox" 
+                               {% if profile.desktop_notifications %}checked{% endif %}
+                               class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                        <label for="desktop_notifications" class="ml-3 block text-sm font-medium text-gray-700">
+                            Show desktop notifications
+                        </label>
+                    </div>
+                    <p class="text-sm text-gray-500 ml-7">
+                        Show browser notifications for real-time updates (requires browser permission).
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Digest Frequency -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Digest Frequency</h3>
+                
+                <div class="space-y-2">
+                    <div class="flex items-center">
+                        <input id="digest_daily" 
+                               name="digest_frequency" 
+                               type="radio" 
+                               value="daily"
+                               {% if profile.digest_frequency == 'daily' %}checked{% endif %}
+                               class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300">
+                        <label for="digest_daily" class="ml-3 block text-sm font-medium text-gray-700">
+                            Daily digest
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <input id="digest_weekly" 
+                               name="digest_frequency" 
+                               type="radio" 
+                               value="weekly"
+                               {% if profile.digest_frequency == 'weekly' %}checked{% endif %}
+                               class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300">
+                        <label for="digest_weekly" class="ml-3 block text-sm font-medium text-gray-700">
+                            Weekly digest
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <input id="digest_monthly" 
+                               name="digest_frequency" 
+                               type="radio" 
+                               value="monthly"
+                               {% if profile.digest_frequency == 'monthly' %}checked{% endif %}
+                               class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300">
+                        <label for="digest_monthly" class="ml-3 block text-sm font-medium text-gray-700">
+                            Monthly digest
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <input id="digest_never" 
+                               name="digest_frequency" 
+                               type="radio" 
+                               value="never"
+                               {% if profile.digest_frequency == 'never' %}checked{% endif %}
+                               class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300">
+                        <label for="digest_never" class="ml-3 block text-sm font-medium text-gray-700">
+                            Never send digest emails
+                        </label>
+                    </div>
+                </div>
+                
+                <p class="text-sm text-gray-500 mt-2">
+                    Digest emails summarize your unread notifications and are sent at your preferred frequency.
+                </p>
+            </div>
+        </div>
+        
+        <div class="mt-6 flex justify-between">
+            <a href="{% url 'core:notification_center' %}" 
+               class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                Cancel
+            </a>
+            
+            <button type="submit" 
+                    class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                Save Preferences
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

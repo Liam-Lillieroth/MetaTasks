@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic.base import RedirectView
 from . import views
 from . import transition_views
 from . import attachment_views
@@ -9,6 +10,12 @@ from . import notification_views
 app_name = 'cflows'
 
 urlpatterns = [
+    # Legacy underscore route redirect -> hyphenated
+    path(
+        'work_items/<int:work_item_id>/',
+        RedirectView.as_view(pattern_name='cflows:work_item_detail', permanent=True),
+        name='work_item_detail_legacy'
+    ),
     # Dashboard
     path('', views.index, name='index'),
     
@@ -102,4 +109,5 @@ urlpatterns = [
     path('api/notifications/', notification_views.real_time_notifications, name='api_notifications'),
     path('api/notifications/read/', notification_views.mark_notification_read, name='api_notification_read'),
     path('api/bookings/<int:booking_id>/complete/', views.complete_booking, name='api_complete_booking'),
+    path('api/mentions/suggestions/', views.mention_suggestions, name='api_mention_suggestions'),
 ]

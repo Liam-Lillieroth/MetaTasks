@@ -26,7 +26,7 @@ urlpatterns = [
     path('', include('homepage.urls')),
     path('accounts/', include('accounts.urls')),
     path('core/', include('core.urls')),
-    path('services/cflows/', include('services.cflows.urls')),
+    path('services/cflows/', include(('services.cflows.urls', 'cflows'), namespace='cflows')),
     path('services/scheduling/', include('services.scheduling.urls')),
     path('services/staff-panel/', include('services.staff_panel.urls')),
     path('licensing/', include('licensing.urls')),

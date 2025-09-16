@@ -18,6 +18,8 @@ from core.models import UserProfile
 from core.views import require_organization_access
 from .models import WorkItem, WorkItemComment, WorkItemAttachment, WorkItemRevision
 from .forms import WorkItemCommentForm, WorkItemAttachmentForm
+from .mention_utils import parse_mentions
+from core.models import Notification
 
 
 def get_user_profile(request):
@@ -65,6 +67,68 @@ def add_comment(request, work_item_id):
                 pass
         
         comment.save()
+        # Parse mentions and attach relations
+        try:
+            mentions = parse_mentions(comment.content)
+            # Resolve users by username within organization
+            if mentions['usernames']:
+                from core.models import UserProfile
+                mentioned_users = list(UserProfile.objects.filter(
+                    organization=profile.organization,
+                    user__username__in=list(mentions['usernames'])
+                ))
+                if mentioned_users:
+                    comment.mentioned_users.set(mentioned_users)
+            # Resolve teams by name within organization
+            if mentions['team_names']:
+                from core.models import Team
+                mentioned_teams = list(Team.objects.filter(
+                    organization=profile.organization,
+                    name__in=list(mentions['team_names'])
+                ))
+                if mentioned_teams:
+                    comment.mentioned_teams.set(mentioned_teams)
+            # Create notifications to mentioned users (including team members)
+            notified_user_ids = set()
+            for u in getattr(comment, 'mentioned_users').all():
+                if u.id != profile.id:
+                    notification = Notification.objects.create(
+                        recipient=u.user,
+                        title=f"You were mentioned on '{work_item.title}'",
+                        message=f"{profile.user.get_full_name() or profile.user.username} mentioned you in a comment.",
+                        notification_type='info',
+                        content_type='WorkItem',
+                        object_id=str(work_item.id),
+                        action_url=f"/services/cflows/work-items/{work_item.id}/",
+                        action_text='View Work Item'
+                    )
+                    # Trigger email notification
+                    from core.tasks import send_mention_notification_email
+                    send_mention_notification_email.delay(notification.id)
+                    notified_user_ids.add(u.id)
+            for team in getattr(comment, 'mentioned_teams').all():
+                for member in team.members.all():
+                    if member.id == profile.id:
+                        continue
+                    if member.id in notified_user_ids:
+                        continue
+                    notification = Notification.objects.create(
+                        recipient=member.user,
+                        title=f"Team mention on '{work_item.title}'",
+                        message=f"{profile.user.get_full_name() or profile.user.username} mentioned @team:{team.name} in a comment.",
+                        notification_type='info',
+                        content_type='WorkItem',
+                        object_id=str(work_item.id),
+                        action_url=f"/services/cflows/work-items/{work_item.id}/",
+                        action_text='View Work Item'
+                    )
+                    # Trigger email notification
+                    from core.tasks import send_mention_notification_email
+                    send_mention_notification_email.delay(notification.id)
+                    notified_user_ids.add(member.id)
+        except Exception:
+            # Non-fatal if mention parsing fails
+            pass
         
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({
@@ -304,6 +368,22 @@ def edit_comment(request, work_item_id, comment_id):
     comment.content = new_content
     comment.is_edited = True
     comment.save()
+    # Re-parse mentions after edit
+    try:
+        mentions = parse_mentions(comment.content)
+        from core.models import UserProfile, Team
+        mentioned_users = list(UserProfile.objects.filter(
+            organization=profile.organization,
+            user__username__in=list(mentions['usernames'])
+        )) if mentions['usernames'] else []
+        mentioned_teams = list(Team.objects.filter(
+            organization=profile.organization,
+            name__in=list(mentions['team_names'])
+        )) if mentions['team_names'] else []
+        comment.mentioned_users.set(mentioned_users)
+        comment.mentioned_teams.set(mentioned_teams)
+    except Exception:
+        pass
     
     messages.success(request, 'Comment updated successfully!')
     

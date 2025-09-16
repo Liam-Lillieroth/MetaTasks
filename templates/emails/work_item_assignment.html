@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Item Assignment - MetaTask</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 20px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #7c3aed;
+            margin-bottom: 10px;
+        }
+        .assignment-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        .work-item-details {
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .work-item-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        .work-item-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 15px;
+        }
+        .meta-item {
+            display: flex;
+            align-items: center;
+        }
+        .priority-high { color: #dc2626; }
+        .priority-medium { color: #d97706; }
+        .priority-low { color: #059669; }
+        .action-button {
+            display: inline-block;
+            background-color: #7c3aed;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">MetaTask</div>
+            <div class="assignment-badge">Work Item Assigned</div>
+        </div>
+        
+        <p>Hello {{ assigned_user.get_full_name|default:assigned_user.username }},</p>
+        
+        <p>You have been assigned a new work item:</p>
+        
+        <div class="work-item-details">
+            <div class="work-item-title">{{ work_item.title }}</div>
+            
+            <div class="work-item-meta">
+                <div class="meta-item">
+                    <strong>Workflow:</strong> {{ work_item.workflow.name }}
+                </div>
+                <div class="meta-item">
+                    <strong>Current Step:</strong> {{ work_item.current_step.name }}
+                </div>
+                <div class="meta-item">
+                    <strong>Priority:</strong> 
+                    <span class="priority-{{ work_item.priority }}">{{ work_item.get_priority_display }}</span>
+                </div>
+                {% if work_item.due_date %}
+                <div class="meta-item">
+                    <strong>Due:</strong> {{ work_item.due_date|date:"M d, Y g:i A" }}
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if work_item.description %}
+            <div style="margin-top: 15px;">
+                <strong>Description:</strong><br>
+                {{ work_item.description|linebreaks }}
+            </div>
+            {% endif %}
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{ site_url }}/services/cflows/work-items/{{ work_item.id }}/" class="action-button">
+                View Work Item
+            </a>
+        </div>
+        
+        <div class="footer">
+            <p>This assignment notification was sent to {{ assigned_user.email }}.</p>
+            <p style="font-size: 12px; color: #9ca3af; margin-top: 15px;">
+                You can manage your notification preferences in your account settings.<br>
+                © {% now "Y" %} MetaTask. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

@@ -352,11 +352,25 @@ class SchedulingService:
         return True
     
     def complete_booking(self, booking: BookingRequest, completed_by) -> bool:
-        """Mark booking as completed"""
+        """Mark booking as completed
+
+        Allows completion from:
+        - confirmed
+        - in_progress
+        - pending (only when created from a CFlows work item or flagged with work_item_id)
+        """
 
         from services.cflows.signals import booking_status_changed
-        
-        if booking.status not in ['confirmed', 'in_progress']:
+
+        is_work_item_booking = (
+            (booking.source_service == 'cflows') or
+            (isinstance(booking.custom_data, dict) and booking.custom_data.get('work_item_id'))
+        )
+
+        if not (
+            booking.status in ['confirmed', 'in_progress'] or
+            (booking.status == 'pending' and is_work_item_booking)
+        ):
             return False
         
         booking.status = 'completed'
