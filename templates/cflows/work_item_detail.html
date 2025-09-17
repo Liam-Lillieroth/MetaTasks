@@ -121,7 +121,7 @@
                             </div>
                             <div class="ml-4 flex flex-col space-y-2">
                                 {% if booking_status.needs_creation %}
-                                    <a href="/services/cflows/calendar/bookings/create/?work_item_id={{ work_item.id }}&step_id={{ work_item.current_step.id }}" class="inline-flex items-center px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-md shadow">
+                                    <a href="{% url 'cflows:create_booking_for_work_item' work_item.id work_item.current_step.id %}" class="inline-flex items-center px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-md shadow">
                                         <i class="fas fa-plus mr-2"></i>Create Booking
                                     </a>
                                 {% else %}

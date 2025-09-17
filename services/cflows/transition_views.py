@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.db import transaction
+from django.urls import reverse
 from core.models import Organization, UserProfile, Team
 from core.views import require_organization_access
 from .models import (
@@ -141,7 +142,7 @@ def transition_work_item(request, work_item_id, transition_id):
                         'success': True,
                         'new_step': transition.to_step.name,
                         'requires_booking': True,
-                        'redirect_url': f'/services/cflows/calendar/bookings/create/?work_item_id={work_item.id}&step_id={transition.to_step.id}',
+                        'redirect_url': reverse('cflows:create_booking_for_work_item', args=[work_item.id, transition.to_step.id]),
                         'message': f'Moved to {transition.to_step.name}. Booking required.'
                     })
                 else:
