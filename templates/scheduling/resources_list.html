@@ -46,48 +46,134 @@
 <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
     <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
         <div class="text-2xl mb-2">👥</div>
-        <div class="text-2xl font-bold text-blue-600">0</div>
+        <div class="text-2xl font-bold text-blue-600">{{ resource_counts.person|default:0 }}</div>
         <div class="text-sm text-gray-600">People</div>
     </div>
     
     <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
         <div class="text-2xl mb-2">🔧</div>
-        <div class="text-2xl font-bold text-green-600">0</div>
+        <div class="text-2xl font-bold text-green-600">{{ resource_counts.equipment|default:0 }}</div>
         <div class="text-sm text-gray-600">Equipment</div>
     </div>
     
     <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
         <div class="text-2xl mb-2">🏢</div>
-        <div class="text-2xl font-bold text-purple-600">0</div>
+        <div class="text-2xl font-bold text-purple-600">{{ resource_counts.room|default:0 }}</div>
         <div class="text-sm text-gray-600">Rooms</div>
     </div>
     
     <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
         <div class="text-2xl mb-2">🚗</div>
-        <div class="text-2xl font-bold text-orange-600">0</div>
+        <div class="text-2xl font-bold text-orange-600">{{ resource_counts.vehicle|default:0 }}</div>
         <div class="text-sm text-gray-600">Vehicles</div>
     </div>
     
     <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
         <div class="text-2xl mb-2">📦</div>
-        <div class="text-2xl font-bold text-gray-600">0</div>
+        <div class="text-2xl font-bold text-gray-600">{{ resource_counts.other|default:0 }}</div>
         <div class="text-sm text-gray-600">Other</div>
     </div>
 </div>
 
 <!-- Resources List -->
 <div class="space-y-4">
-    <!-- Empty state -->
-    <div class="bg-white rounded-lg border border-gray-200 p-12 text-center">
-        <div class="mx-auto mb-4">
-            <i class="fas fa-users text-6xl text-gray-400"></i>
+    {% if resources %}
+        <!-- Current Availability Overview -->
+        <div class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Today's Availability Overview</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for item in resource_availability %}
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="font-medium text-gray-900">{{ item.resource.name }}</h4>
+                        <span class="px-2 py-1 text-xs font-medium rounded-full 
+                               {% if item.status == 'available' %}bg-green-100 text-green-800
+                               {% elif item.status == 'moderate' %}bg-yellow-100 text-yellow-800
+                               {% else %}bg-red-100 text-red-800{% endif %}">
+                            {% if item.status == 'available' %}Available
+                            {% elif item.status == 'moderate' %}Moderate
+                            {% else %}Busy{% endif %}
+                        </span>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        <div>Type: {{ item.resource.get_resource_type_display }}</div>
+                        <div>Today's bookings: {{ item.today_bookings }}/{{ item.resource.max_concurrent_bookings }}</div>
+                        <div>Utilization: {{ item.utilization_percent }}%</div>
+                    </div>
+                    <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+                        <div class="h-2 rounded-full {% if item.utilization_percent > 80 %}bg-red-500{% elif item.utilization_percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}" 
+                             style="width: {{ item.utilization_percent }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
         </div>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">No resources yet</h3>
-        <p class="text-gray-600 mb-4">Add people, equipment, rooms, or other resources to start scheduling.</p>
-        <button @click="showResourceModal()" class="btn btn-primary">
-            <i class="fas fa-plus mr-2"></i>Add Your First Resource
-        </button>
-    </div>
+        
+        <!-- Resource Cards -->
+        {% for resource in resources %}
+        <div class="card">
+            <div class="flex items-start justify-between">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0 mr-4">
+                        <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                            {% if resource.resource_type == 'person' %}
+                                <i class="fas fa-user text-blue-600"></i>
+                            {% elif resource.resource_type == 'equipment' %}
+                                <i class="fas fa-tools text-green-600"></i>
+                            {% elif resource.resource_type == 'room' %}
+                                <i class="fas fa-door-open text-purple-600"></i>
+                            {% elif resource.resource_type == 'vehicle' %}
+                                <i class="fas fa-car text-orange-600"></i>
+                            {% else %}
+                                <i class="fas fa-cube text-gray-600"></i>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="flex-1">
+                        <div class="flex items-center mb-2">
+                            <h3 class="text-lg font-semibold text-gray-900 mr-3">{{ resource.name }}</h3>
+                            <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">{{ resource.get_resource_type_display }}</span>
+                            <span class="ml-2 px-2 py-1 text-xs font-medium {% if resource.is_active %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %} rounded-full">
+                                {% if resource.is_active %}Active{% else %}Inactive{% endif %}
+                            </span>
+                        </div>
+                        
+                        {% if resource.description %}
+                        <p class="text-gray-600 mb-2">{{ resource.description }}</p>
+                        {% endif %}
+                        
+                        <div class="flex items-center text-sm text-gray-500 space-x-4">
+                            {% if resource.linked_team %}
+                                <span><i class="fas fa-users mr-1"></i>{{ resource.linked_team.name }}</span>
+                            {% endif %}
+                            <span><i class="fas fa-layer-group mr-1"></i>Capacity: {{ resource.max_concurrent_bookings }}</span>
+                            <span><i class="fas fa-cog mr-1"></i>{{ resource.service_type }}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-2 ml-4">
+                    <a href="{% url 'scheduling:resource_detail' resource.id %}" class="text-blue-600 hover:text-blue-800 text-sm">View</a>
+                    <button class="text-blue-600 hover:text-blue-800 text-sm">Edit</button>
+                    <button class="text-red-600 hover:text-red-800 text-sm">Delete</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <!-- Empty state -->
+        <div class="bg-white rounded-lg border border-gray-200 p-12 text-center">
+            <div class="mx-auto mb-4">
+                <i class="fas fa-users text-6xl text-gray-400"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No resources yet</h3>
+            <p class="text-gray-600 mb-4">Add people, equipment, rooms, or other resources to start scheduling.</p>
+            <button @click="showResourceModal()" class="btn btn-primary">
+                <i class="fas fa-plus mr-2"></i>Add Your First Resource
+            </button>
+        </div>
+    {% endif %}
 </div>
     
     <!-- Example resource cards for reference:

@@ -166,6 +166,12 @@
                                                 title="Manage Permissions">
                                             <i class="fas fa-key"></i>
                                         </button>
+                                        <button type="button" class="manage-users-btn text-green-600 hover:text-green-900" 
+                                                data-role-id="{{ role.id }}" 
+                                                data-role-name="{{ role.name }}"
+                                                title="Manage Users">
+                                            <i class="fas fa-users"></i>
+                                        </button>
                                         <button type="button" class="delete-role-btn text-red-600 hover:text-red-900" 
                                                 data-role-id="{{ role.id }}" 
                                                 data-role-name="{{ role.name }}" 
@@ -242,9 +248,8 @@
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <form id="createRoleForm" method="post" action="{% url 'staff_panel:role_permissions' %}">
+            <form id="createRoleForm">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="create_role">
                 <div class="mb-4">
                     <label for="roleName" class="block text-sm font-medium text-gray-700 mb-2">Role Name</label>
                     <input type="text" id="roleName" name="role_name" required 
@@ -280,9 +285,8 @@
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <form id="editRoleForm" method="post">
+            <form id="editRoleForm">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="edit_role">
                 <input type="hidden" id="editRoleId" name="role_id">
                 <div class="mb-4">
                     <label for="editRoleName" class="block text-sm font-medium text-gray-700 mb-2">Role Name</label>
@@ -291,7 +295,7 @@
                 </div>
                 <div class="mb-4">
                     <label for="editRoleDescription" class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                    <textarea id="editRoleDescription" name="description" rows="3" 
+                    <textarea id="editRoleDescription" name="role_description" rows="3" 
                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
                 </div>
                 <div class="flex justify-end space-x-3">
@@ -325,10 +329,9 @@
                     <p class="text-sm">This role is assigned to <span id="deleteUserCount"></span> user(s). They will lose these permissions.</p>
                 </div>
             </div>
-            <form id="deleteRoleForm" method="post">
+            <form id="deleteRoleForm">
                 {% csrf_token %}
                 <input type="hidden" id="deleteRoleId" name="role_id">
-                <input type="hidden" name="action" value="delete">
                 <div class="flex justify-end space-x-3">
                     <button type="button" onclick="closeModal('deleteRoleModal')" 
                             class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">
@@ -354,10 +357,9 @@
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <form id="managePermissionsForm" method="post">
+            <form id="managePermissionsForm">
                 {% csrf_token %}
                 <input type="hidden" id="permissionRoleId" name="role_id">
-                <input type="hidden" name="action" value="manage_permissions">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
                     {% for category, perms in permission_categories.items %}
                         <div class="border border-gray-200 rounded-lg p-4">
@@ -394,6 +396,54 @@
     </div>
 </div>
 
+<!-- Manage Users Modal -->
+<div id="manageUsersModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white">
+        <div class="flex items-center justify-between pb-3">
+            <h3 class="text-lg font-bold text-gray-900" id="manageUsersTitle">Manage Users for Role</h3>
+            <button type="button" onclick="closeModal('manageUsersModal')" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="mt-4">
+            <!-- Search Users Section -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Add Users to Role</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="userSearchInput" 
+                           placeholder="Search users by name, username, or email..." 
+                           class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <button type="button" onclick="searchUsers()" 
+                            class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+                        Search
+                    </button>
+                </div>
+                <div id="searchResults" class="mt-3 hidden">
+                    <div class="border border-gray-200 rounded-md max-h-48 overflow-y-auto">
+                        <!-- Search results will be populated here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Current Users Section -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Current Users</label>
+                <div id="currentRoleUsers" class="border border-gray-200 rounded-md max-h-64 overflow-y-auto">
+                    <!-- Current users will be populated here -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" onclick="closeModal('manageUsersModal')" 
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
 // Modal functions
 function openModal(modalId) {
@@ -409,11 +459,232 @@ function openCreateRoleModal() {
     openModal('createRoleModal');
 }
 
+// Show notification
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-md ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white`;
+    notification.innerHTML = `
+        <div class="flex items-center">
+            <span>${message}</span>
+            <button onclick="this.parentElement.parentElement.remove()" class="ml-2 text-white hover:text-gray-200">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+// CSRF token helper
+function getCSRFToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]').value;
+}
+
+// Create role function
+function createRole() {
+    const form = document.getElementById('createRoleForm');
+    const formData = new FormData(form);
+    
+    fetch('{% url "staff_panel:create_role" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCSRFToken()
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            closeModal('createRoleModal');
+            location.reload(); // Refresh to show new role
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error creating role:', error);
+        showNotification('Error creating role. Please try again.', 'error');
+    });
+    
+    return false; // Prevent form submission
+}
+
+// Edit role function
+function editRole() {
+    const form = document.getElementById('editRoleForm');
+    const formData = new FormData(form);
+    const roleId = document.getElementById('editRoleId').value;
+    
+    fetch(`{% url "staff_panel:edit_role" role_id=0 %}`.replace('0', roleId), {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCSRFToken()
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            closeModal('editRoleModal');
+            // Update the role in the UI
+            updateRoleInUI(data.role);
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error editing role:', error);
+        showNotification('Error updating role. Please try again.', 'error');
+    });
+    
+    return false; // Prevent form submission
+}
+
+// Delete role function
+function deleteRole() {
+    const roleId = document.getElementById('deleteRoleId').value;
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', getCSRFToken());
+    
+    fetch(`{% url "staff_panel:delete_role" role_id=0 %}`.replace('0', roleId), {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCSRFToken()
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            closeModal('deleteRoleModal');
+            // Remove the role from the UI
+            removeRoleFromUI(roleId);
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting role:', error);
+        showNotification('Error deleting role. Please try again.', 'error');
+    });
+    
+    return false; // Prevent form submission
+}
+
+// Assign permissions function
+function assignPermissions() {
+    const form = document.getElementById('managePermissionsForm');
+    const formData = new FormData(form);
+    const roleId = document.getElementById('permissionRoleId').value;
+    
+    fetch(`{% url "staff_panel:assign_role_permissions" role_id=0 %}`.replace('0', roleId), {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCSRFToken()
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            closeModal('managePermissionsModal');
+            // Update permission count in UI
+            updatePermissionCountInUI(roleId, data.permission_count);
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error assigning permissions:', error);
+        showNotification('Error updating permissions. Please try again.', 'error');
+    });
+    
+    return false; // Prevent form submission
+}
+
+// Update role in UI
+function updateRoleInUI(role) {
+    const roleCard = document.querySelector(`[data-role-id="${role.id}"]`);
+    if (roleCard) {
+        const nameElement = roleCard.querySelector('.role-name');
+        const descElement = roleCard.querySelector('.role-description');
+        
+        if (nameElement) nameElement.textContent = role.name;
+        if (descElement) descElement.textContent = role.description || 'No description provided.';
+        
+        // Update data attributes for buttons
+        roleCard.querySelectorAll('.edit-role-btn').forEach(btn => {
+            btn.dataset.roleName = role.name;
+            btn.dataset.roleDescription = role.description;
+        });
+        roleCard.querySelectorAll('.delete-role-btn').forEach(btn => {
+            btn.dataset.roleName = role.name;
+        });
+        roleCard.querySelectorAll('.manage-permissions-btn').forEach(btn => {
+            btn.dataset.roleName = role.name;
+        });
+    }
+}
+
+// Remove role from UI
+function removeRoleFromUI(roleId) {
+    const roleCard = document.querySelector(`[data-role-id="${roleId}"]`);
+    if (roleCard) {
+        roleCard.remove();
+    }
+    
+    // Check if no roles left and show empty state
+    const roleCards = document.querySelectorAll('[data-role-id]');
+    if (roleCards.length === 0) {
+        location.reload(); // Reload to show empty state
+    }
+}
+
+// Update permission count in UI
+function updatePermissionCountInUI(roleId, count) {
+    const roleCard = document.querySelector(`[data-role-id="${roleId}"]`);
+    if (roleCard) {
+        const countElement = roleCard.querySelector('.permission-count');
+        if (countElement) {
+            countElement.textContent = count;
+        }
+    }
+}
+
 // Event listeners for role buttons
 document.addEventListener('DOMContentLoaded', function() {
-    // Create role button
-    document.querySelectorAll('.create-role-btn').forEach(btn => {
-        btn.addEventListener('click', openCreateRoleModal);
+    // Create role form submission
+    document.getElementById('createRoleForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        createRole();
+    });
+    
+    // Edit role form submission
+    document.getElementById('editRoleForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        editRole();
+    });
+    
+    // Delete role form submission
+    document.getElementById('deleteRoleForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        deleteRole();
+    });
+    
+    // Manage permissions form submission
+    document.getElementById('managePermissionsForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        assignPermissions();
     });
 
     // Edit role buttons
@@ -425,8 +696,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             document.getElementById('editRoleId').value = roleId;
             document.getElementById('editRoleName').value = roleName;
-            document.getElementById('editRoleDescription').value = roleDescription;
-            document.getElementById('editRoleForm').action = `{% url 'staff_panel:role_permissions' %}`;
+            document.getElementById('editRoleDescription').value = roleDescription || '';
             
             openModal('editRoleModal');
         });
@@ -442,7 +712,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('deleteRoleId').value = roleId;
             document.getElementById('deleteRoleName').textContent = roleName;
             document.getElementById('deleteUserCount').textContent = userCount;
-            document.getElementById('deleteRoleForm').action = `{% url 'staff_panel:role_permissions' %}`;
             
             const warningDiv = document.getElementById('deleteRoleWarning');
             if (userCount > 0) {
@@ -463,7 +732,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             document.getElementById('permissionRoleId').value = roleId;
             document.getElementById('permissionRoleName').textContent = roleName;
-            document.getElementById('managePermissionsForm').action = `{% url 'staff_panel:role_permissions' %}`;
             
             // Load current permissions for this role
             loadRolePermissions(roleId);
@@ -480,7 +748,7 @@ function loadRolePermissions(roleId) {
     document.querySelectorAll('.category-checkbox').forEach(cb => cb.checked = false);
     
     // Fetch current permissions for this role
-    fetch(`/services/staff-panel/roles/${roleId}/permissions/`)
+    fetch(`{% url "staff_panel:get_role_permissions" role_id=0 %}`.replace('0', roleId))
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -496,10 +764,12 @@ function loadRolePermissions(roleId) {
                 updateCategoryCheckboxes();
             } else {
                 console.error('Error loading permissions:', data.error);
+                showNotification('Error loading current permissions', 'error');
             }
         })
         .catch(error => {
             console.error('Error fetching permissions:', error);
+            showNotification('Error loading permissions', 'error');
         });
 }
 
@@ -528,9 +798,189 @@ function toggleCategoryPermissions(categoryId) {
     });
 }
 
+// Manage users functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners for manage users buttons
+    document.querySelectorAll('.manage-users-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const roleId = this.dataset.roleId;
+            const roleName = this.dataset.roleName;
+            
+            currentRoleId = roleId;
+            document.getElementById('manageUsersTitle').textContent = `Manage Users for "${roleName}"`;
+            
+            // Load current users for this role
+            loadRoleUsers(roleId);
+            
+            openModal('manageUsersModal');
+        });
+    });
+});
+
+let currentRoleId = null;
+
+// Search for users
+function searchUsers() {
+    const query = document.getElementById('userSearchInput').value.trim();
+    if (query.length < 2) {
+        showNotification('Please enter at least 2 characters to search', 'error');
+        return;
+    }
+    
+    fetch(`{% url 'staff_panel:search_users' %}?q=${encodeURIComponent(query)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            displaySearchResults(data.users);
+        } else {
+            showNotification(data.error || 'Error searching users', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error searching users', 'error');
+    });
+}
+
+// Display search results
+function displaySearchResults(users) {
+    const resultsDiv = document.getElementById('searchResults');
+    const resultsContainer = resultsDiv.querySelector('div');
+    
+    if (users.length === 0) {
+        resultsContainer.innerHTML = '<div class="p-3 text-gray-500">No users found</div>';
+    } else {
+        resultsContainer.innerHTML = users.map(user => `
+            <div class="p-3 border-b border-gray-100 flex items-center justify-between hover:bg-gray-50">
+                <div>
+                    <div class="font-medium text-gray-900">${user.first_name} ${user.last_name}</div>
+                    <div class="text-sm text-gray-500">${user.username} • ${user.email}</div>
+                </div>
+                <button type="button" onclick="assignUserToRole(${user.id}, '${user.first_name} ${user.last_name}')"
+                        class="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700">
+                    Add to Role
+                </button>
+            </div>
+        `).join('');
+    }
+    
+    resultsDiv.classList.remove('hidden');
+}
+
+// Load current users for a role
+function loadRoleUsers(roleId) {
+    fetch(`{% url 'staff_panel:get_role_users' role_id=0 %}`.replace('0', roleId), {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            displayCurrentUsers(data.users);
+        } else {
+            showNotification(data.error || 'Error loading role users', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error loading role users', 'error');
+    });
+}
+
+// Display current users
+function displayCurrentUsers(users) {
+    const container = document.getElementById('currentRoleUsers');
+    
+    if (users.length === 0) {
+        container.innerHTML = '<div class="p-3 text-gray-500">No users assigned to this role</div>';
+    } else {
+        container.innerHTML = users.map(user => `
+            <div class="p-3 border-b border-gray-100 flex items-center justify-between hover:bg-gray-50">
+                <div>
+                    <div class="font-medium text-gray-900">${user.first_name} ${user.last_name}</div>
+                    <div class="text-sm text-gray-500">${user.username} • ${user.email}</div>
+                </div>
+                <button type="button" onclick="removeUserFromRole(${user.profile_id}, '${user.first_name} ${user.last_name}')"
+                        class="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700">
+                    Remove
+                </button>
+            </div>
+        `).join('');
+    }
+}
+
+// Assign user to role
+function assignUserToRole(userId, userName) {
+    if (!currentRoleId) return;
+    
+    fetch(`{% url 'staff_panel:assign_user_to_role' role_id=0 %}`.replace('0', currentRoleId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            user_id: userId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`${userName} added to role successfully`);
+            loadRoleUsers(currentRoleId); // Refresh the user list
+            document.getElementById('userSearchInput').value = ''; // Clear search
+            document.getElementById('searchResults').classList.add('hidden'); // Hide search results
+        } else {
+            showNotification(data.error || 'Error assigning user to role', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error assigning user to role', 'error');
+    });
+}
+
+// Remove user from role
+function removeUserFromRole(userProfileId, userName) {
+    if (!currentRoleId) return;
+    
+    if (!confirm(`Are you sure you want to remove ${userName} from this role?`)) {
+        return;
+    }
+    
+    fetch(`{% url 'staff_panel:remove_user_from_role' role_id=0 user_id=0 %}`.replace('0', currentRoleId).replace('0', userProfileId), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`${userName} removed from role successfully`);
+            loadRoleUsers(currentRoleId); // Refresh the user list
+        } else {
+            showNotification(data.error || 'Error removing user from role', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error removing user from role', 'error');
+    });
+}
+
 // Close modal when clicking outside
 window.onclick = function(event) {
-    const modals = ['createRoleModal', 'editRoleModal', 'deleteRoleModal', 'managePermissionsModal'];
+    const modals = ['createRoleModal', 'editRoleModal', 'deleteRoleModal', 'managePermissionsModal', 'manageUsersModal'];
     modals.forEach(modalId => {
         const modal = document.getElementById(modalId);
         if (event.target === modal) {

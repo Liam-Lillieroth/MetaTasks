@@ -70,13 +70,13 @@
             
             <!-- Top Right Actions -->
             <div class="flex items-center space-x-2">
-                <!-- Admin Panel -->
+                <!-- Staff Panel -->
                 {% if profile.has_staff_panel_access or profile.is_organization_admin %}
-                <a href="/admin/" 
+                <a href="/services/staff-panel/" 
                    class="text-indigo-100 hover:bg-white hover:bg-opacity-10 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center"
-                   title="Admin Panel">
-                    <i class="fas fa-cog mr-2"></i>
-                    <span class="hidden sm:inline">Admin</span>
+                   title="Staff Panel">
+                    <i class="fas fa-users-cog mr-2"></i>
+                    <span class="hidden sm:inline">Staff Panel</span>
                 </a>
                 {% endif %}
                 
@@ -194,9 +194,15 @@
                         Dashboard
                     </a>
                     <a href="{% url 'cflows:workflow_list' %}" 
-                       class="{% if 'workflow' in request.resolver_match.url_name %}bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500{% else %}text-gray-700 hover:bg-indigo-50 hover:text-indigo-700{% endif %} flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200">
+                       class="{% if 'workflow' in request.resolver_match.url_name and 'builder' not in request.resolver_match.url_name %}bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500{% else %}text-gray-700 hover:bg-indigo-50 hover:text-indigo-700{% endif %} flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200">
                         <i class="fas fa-sitemap mr-3 text-blue-500"></i>
                         Workflows
+                    </a>
+                    <a href="{% url 'cflows:workflow_builder' %}" 
+                       class="{% if 'builder' in request.resolver_match.url_name %}bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg{% else %}text-gray-700 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 hover:text-indigo-700{% endif %} flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200">
+                        <i class="fas fa-magic mr-3 {% if 'builder' in request.resolver_match.url_name %}text-white{% else %}text-purple-500{% endif %}"></i>
+                        Workflow Builder
+                        <span class="ml-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full font-semibold">NEW</span>
                     </a>
                     <a href="{% url 'cflows:work_items_list' %}" 
                        class="{% if 'work_item' in request.resolver_match.url_name %}bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500{% else %}text-gray-700 hover:bg-indigo-50 hover:text-indigo-700{% endif %} flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200">
@@ -219,10 +225,16 @@
                 {% if profile and profile.can_create_workflows %}
                 <div class="space-y-1 mb-8">
                     <h3 class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Quick Create</h3>
+                    <a href="{% url 'cflows:workflow_builder' %}" 
+                       class="flex items-center px-3 py-2 text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 shadow-lg">
+                        <i class="fas fa-magic mr-3 text-white"></i>
+                        Workflow Builder
+                        <span class="ml-auto bg-white/20 text-white text-xs px-2 py-0.5 rounded-full font-semibold">NEW</span>
+                    </a>
                     <a href="{% url 'cflows:create_workflow' %}" 
                        class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition-colors duration-200">
                         <i class="fas fa-stream mr-3 text-blue-600"></i>
-                        New Workflow
+                        Basic Workflow
                     </a>
                     <a href="{% url 'cflows:create_advanced_workflow' %}" 
                        class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors duration-200">
@@ -340,7 +352,7 @@
                     <div class="flex items-center space-x-4 text-sm text-gray-600">
                         <a href="/dashboard/" class="hover:text-indigo-600">Main Dashboard</a>
                         {% if profile.has_staff_panel_access or profile.is_organization_admin %}
-                        <a href="/admin/" class="hover:text-indigo-600">Admin</a>
+                        <a href="/services/staff-panel/" class="hover:text-indigo-600">Staff Panel</a>
                         {% endif %}
                         <a href="#" class="hover:text-indigo-600">Help</a>
                     </div>

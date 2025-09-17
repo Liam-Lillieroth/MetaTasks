@@ -416,15 +416,19 @@
                 <div class="flex items-center justify-between mb-4">
                     <h4 class="text-md font-medium text-gray-900">Add Members</h4>
                     <div class="flex space-x-2">
-                        <input type="text" id="memberSearch" placeholder="Search users..." 
-                               class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <input type="text" id="memberSearch" placeholder="Search by name, username, or email..." 
+                               class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64">
                         <button type="button" onclick="searchUsers()" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
                             <i class="fas fa-search"></i>
                         </button>
                     </div>
                 </div>
                 <div id="userSearchResults" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-60 overflow-y-auto">
-                    <!-- Search results will be populated here -->
+                    <div class="col-span-full text-center text-gray-500 py-8">
+                        <i class="fas fa-search text-2xl mb-2"></i>
+                        <p>Search for users to add to the team</p>
+                        <p class="text-sm">You can search by name, username, or email</p>
+                    </div>
                 </div>
             </div>
             
@@ -563,88 +567,240 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Team management functions
+let currentTeamId = null;
+
 function loadTeamMembers(teamId) {
-    // This would typically make an AJAX call to get team members
-    // For now, we'll show placeholder content
+    currentTeamId = teamId;
     const currentMembers = document.getElementById('currentMembers');
-    currentMembers.innerHTML = `
-        <div class="bg-gray-50 p-4 rounded-lg">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center">
-                    <div class="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center text-white font-medium">JD</div>
-                    <div class="ml-3">
-                        <p class="text-sm font-medium text-gray-900">John Doe</p>
-                        <p class="text-xs text-gray-500">john@example.com</p>
-                    </div>
-                </div>
-                <button type="button" onclick="removeTeamMember(${teamId}, 1)" class="text-red-600 hover:text-red-800">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        </div>
-        <div class="bg-gray-50 p-4 rounded-lg">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center">
-                    <div class="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white font-medium">AS</div>
-                    <div class="ml-3">
-                        <p class="text-sm font-medium text-gray-900">Alice Smith</p>
-                        <p class="text-xs text-gray-500">alice@example.com</p>
-                    </div>
-                </div>
-                <button type="button" onclick="removeTeamMember(${teamId}, 2)" class="text-red-600 hover:text-red-800">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        </div>
-    `;
+    currentMembers.innerHTML = '<div class="col-span-full text-center"><i class="fas fa-spinner fa-spin"></i> Loading members...</div>';
+    
+    fetch(`{% url 'staff_panel:get_team_members' 0 %}`.replace('0', teamId))
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayCurrentMembers(data.members);
+            } else {
+                currentMembers.innerHTML = `<div class="col-span-full text-center text-red-500">Error: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            currentMembers.innerHTML = '<div class="col-span-full text-center text-red-500">Error loading members</div>';
+            console.error('Error:', error);
+        });
 }
 
-function searchUsers() {
-    const searchTerm = document.getElementById('memberSearch').value;
-    const resultsContainer = document.getElementById('userSearchResults');
+function displayCurrentMembers(members) {
+    const currentMembers = document.getElementById('currentMembers');
     
-    if (searchTerm.length < 2) {
-        resultsContainer.innerHTML = '<div class="col-span-full text-center text-gray-500">Enter at least 2 characters to search</div>';
+    if (members.length === 0) {
+        currentMembers.innerHTML = `
+            <div class="col-span-full text-center text-gray-500 py-8">
+                <i class="fas fa-users text-2xl mb-2"></i>
+                <p>No members in this team yet</p>
+            </div>
+        `;
         return;
     }
     
-    // This would typically make an AJAX call to search users
-    // For now, we'll show placeholder results
-    resultsContainer.innerHTML = `
-        <div class="bg-white border border-gray-200 p-4 rounded-lg hover:bg-gray-50 cursor-pointer" onclick="addTeamMember(1, 3)">
+    currentMembers.innerHTML = members.map(member => `
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center text-white font-medium">
+                        ${member.initials}
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm font-medium text-gray-900">
+                            ${member.full_name}
+                            ${member.is_manager ? '<span class="ml-1 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Manager</span>' : ''}
+                        </p>
+                        <p class="text-xs text-gray-500">${member.email}</p>
+                        ${member.title ? `<p class="text-xs text-gray-500">${member.title}</p>` : ''}
+                    </div>
+                </div>
+                <button type="button" onclick="removeTeamMember(${currentTeamId}, ${member.id})" 
+                        class="text-red-600 hover:text-red-800" title="Remove from team">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function searchUsers() {
+    const searchTerm = document.getElementById('memberSearch').value.trim();
+    const resultsContainer = document.getElementById('userSearchResults');
+    
+    if (searchTerm.length < 2) {
+        resultsContainer.innerHTML = `
+            <div class="col-span-full text-center text-gray-500">
+                <i class="fas fa-info-circle mb-2"></i>
+                <p>Enter at least 2 characters to search</p>
+            </div>
+        `;
+        return;
+    }
+    
+    resultsContainer.innerHTML = '<div class="col-span-full text-center"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
+    
+    const url = new URL('{% url "staff_panel:search_users" %}', window.location.origin);
+    url.searchParams.append('q', searchTerm);
+    if (currentTeamId) {
+        url.searchParams.append('team_id', currentTeamId);
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displaySearchResults(data.users);
+            } else {
+                resultsContainer.innerHTML = `<div class="col-span-full text-center text-red-500">Error: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            resultsContainer.innerHTML = '<div class="col-span-full text-center text-red-500">Error searching users</div>';
+            console.error('Error:', error);
+        });
+}
+
+function displaySearchResults(users) {
+    const resultsContainer = document.getElementById('userSearchResults');
+    
+    if (users.length === 0) {
+        resultsContainer.innerHTML = `
+            <div class="col-span-full text-center text-gray-500">
+                <i class="fas fa-user-slash text-2xl mb-2"></i>
+                <p>No users found matching your search</p>
+            </div>
+        `;
+        return;
+    }
+    
+    resultsContainer.innerHTML = users.map(user => `
+        <div class="bg-white border border-gray-200 p-4 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors" 
+             onclick="addTeamMember(${currentTeamId}, ${user.id})">
             <div class="flex items-center">
-                <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-medium">MD</div>
-                <div class="ml-3">
-                    <p class="text-sm font-medium text-gray-900">Mike Davis</p>
-                    <p class="text-xs text-gray-500">mike@example.com</p>
+                <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-medium">
+                    ${user.initials}
+                </div>
+                <div class="ml-3 flex-1">
+                    <p class="text-sm font-medium text-gray-900">${user.full_name}</p>
+                    <p class="text-xs text-gray-500">${user.email}</p>
+                    ${user.title ? `<p class="text-xs text-gray-500">${user.title}</p>` : ''}
+                    ${user.department ? `<p class="text-xs text-blue-600">${user.department}</p>` : ''}
+                </div>
+                <div class="text-indigo-600">
+                    <i class="fas fa-plus"></i>
                 </div>
             </div>
         </div>
-        <div class="bg-white border border-gray-200 p-4 rounded-lg hover:bg-gray-50 cursor-pointer" onclick="addTeamMember(1, 4)">
-            <div class="flex items-center">
-                <div class="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white font-medium">SJ</div>
-                <div class="ml-3">
-                    <p class="text-sm font-medium text-gray-900">Sarah Johnson</p>
-                    <p class="text-xs text-gray-500">sarah@example.com</p>
-                </div>
-            </div>
-        </div>
-    `;
+    `).join('');
 }
 
 function addTeamMember(teamId, userId) {
-    // This would make an AJAX call to add the user to the team
-    console.log(`Adding user ${userId} to team ${teamId}`);
-    // Reload team members after adding
-    loadTeamMembers(teamId);
+    // Show loading state
+    const button = event.currentTarget;
+    const originalContent = button.innerHTML;
+    button.innerHTML = '<div class="flex items-center justify-center"><i class="fas fa-spinner fa-spin"></i></div>';
+    button.style.pointerEvents = 'none';
+    
+    const formData = new FormData();
+    formData.append('user_id', userId);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    fetch(`{% url 'staff_panel:add_team_member' 0 %}`.replace('0', teamId), {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            showNotification(data.message, 'success');
+            // Reload team members
+            loadTeamMembers(teamId);
+            // Clear search results to remove the added user
+            searchUsers();
+        } else {
+            showNotification(data.error, 'error');
+            // Restore button
+            button.innerHTML = originalContent;
+            button.style.pointerEvents = 'auto';
+        }
+    })
+    .catch(error => {
+        showNotification('Error adding team member', 'error');
+        console.error('Error:', error);
+        // Restore button
+        button.innerHTML = originalContent;
+        button.style.pointerEvents = 'auto';
+    });
 }
 
 function removeTeamMember(teamId, userId) {
-    // This would make an AJAX call to remove the user from the team
-    console.log(`Removing user ${userId} from team ${teamId}`);
-    // Reload team members after removing
-    loadTeamMembers(teamId);
+    if (!confirm('Are you sure you want to remove this member from the team?')) {
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('user_id', userId);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    fetch(`{% url 'staff_panel:remove_team_member' 0 %}`.replace('0', teamId), {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            // Reload team members
+            loadTeamMembers(teamId);
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('Error removing team member', 'error');
+        console.error('Error:', error);
+    });
 }
+
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 px-4 py-3 rounded-md shadow-lg max-w-sm ${
+        type === 'success' ? 'bg-green-500 text-white' :
+        type === 'error' ? 'bg-red-500 text-white' :
+        'bg-blue-500 text-white'
+    }`;
+    notification.innerHTML = `
+        <div class="flex items-center">
+            <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : 'info'} mr-2"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
+// Add enter key search functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('memberSearch');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchUsers();
+            }
+        });
+    }
+});
 
 // Team card dropdown functions
 function toggleTeamDropdown(teamId) {

@@ -124,7 +124,7 @@ class SchedulingService:
         
         bookings = BookingRequest.objects.filter(
             resource=resource,
-            status__in=['confirmed', 'in_progress'],
+            status__in=['confirmed', 'in_progress', 'completed'],
             requested_start__date__gte=start_date,
             requested_end__date__lte=end_date
         ).select_related('requested_by')

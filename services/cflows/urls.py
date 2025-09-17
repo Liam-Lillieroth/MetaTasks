@@ -6,6 +6,7 @@ from . import attachment_views
 from . import template_views
 from . import calendar_views
 from . import notification_views
+from . import workflow_builder_views
 
 app_name = 'cflows'
 
@@ -18,6 +19,13 @@ urlpatterns = [
     ),
     # Dashboard
     path('', views.index, name='index'),
+    
+    # Workflow Builder (Enhanced workflow creation)
+    path('workflow-builder/', workflow_builder_views.workflow_builder, name='workflow_builder'),
+    path('create-from-template/<int:template_id>/', workflow_builder_views.create_workflow_from_template, name='create_workflow_from_template'),
+    path('create-custom-workflow/', workflow_builder_views.create_custom_workflow, name='create_custom_workflow'),
+    path('template-preview/<int:template_id>/', workflow_builder_views.get_template_preview, name='get_template_preview'),
+    path('customize-template/<int:template_id>/', workflow_builder_views.customize_template_workflow, name='customize_template_workflow'),
     
     # Workflows
     path('workflows/', views.workflows_list, name='workflow_list'),

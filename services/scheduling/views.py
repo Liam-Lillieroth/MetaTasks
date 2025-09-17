@@ -658,14 +658,54 @@ def sync_cflows_bookings(request):
 @login_required
 @require_organization_access
 def resources_list(request):
-    """List of available resources"""
+    """List of available resources with live data"""
     profile = get_user_profile(request)
     if not profile:
         return render(request, 'scheduling/no_profile.html')
     
+    # Get all resources for the organization
+    resources = SchedulableResource.objects.filter(
+        organization=profile.organization
+    ).select_related('linked_team').order_by('name')
+    
+    # Calculate resource type counts
+    resource_counts = {
+        'person': resources.filter(resource_type='person').count(),
+        'equipment': resources.filter(resource_type='equipment').count(),
+        'room': resources.filter(resource_type='room').count(),
+        'vehicle': resources.filter(resource_type='vehicle').count(),
+        'other': resources.filter(resource_type='other').count(),
+    }
+    
+    # Get current availability data for today
+    today = timezone.now().date()
+    resource_availability = []
+    
+    for resource in resources:
+        # Get today's bookings for this resource
+        today_bookings = BookingRequest.objects.filter(
+            resource=resource,
+            requested_start__date=today,
+            status__in=['confirmed', 'in_progress', 'completed']
+        ).count()
+        
+        utilization = (today_bookings / resource.max_concurrent_bookings * 100) if resource.max_concurrent_bookings > 0 else 0
+        
+        resource_availability.append({
+            'resource': resource,
+            'today_bookings': today_bookings,
+            'utilization_percent': round(utilization, 1),
+            'status': 'busy' if utilization > 80 else 'available' if utilization < 50 else 'moderate'
+        })
+    
     context = {
         'profile': profile,
         'page_title': 'Resources',
+        'resources': resources,
+        'resource_counts': resource_counts,
+        'resource_availability': resource_availability,
+        'total_resources': resources.count(),
+        'active_resources': resources.filter(is_active=True).count(),
     }
     
     return render(request, 'scheduling/resources_list.html', context)

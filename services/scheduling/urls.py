@@ -9,6 +9,7 @@ urlpatterns = [
     
     # Resource management
     path('resources/', views.resource_list, name='resource_list'),
+    path('resources/overview/', views.resources_list, name='resources_overview'),
     path('resources/create/', views.create_resource, name='create_resource'),
     path('resources/<int:resource_id>/', views.resource_detail, name='resource_detail'),
     path('sync-teams/', views.sync_teams, name='sync_teams'),
@@ -20,6 +21,11 @@ urlpatterns = [
     path('bookings/<int:booking_id>/<str:action>/', views.booking_action, name='booking_action'),
     path('bookings/<uuid:booking_uuid>/complete/', views.complete_booking, name='complete_booking'),
     path('bookings/<uuid:booking_uuid>/complete-workflow/', views.complete_booking_workflow_prompt, name='complete_booking_workflow'),
+    
+    # Project management
+    path('projects/', views.projects_list, name='projects'),
+    path('projects/create/', views.create_project, name='create_project'),
+    path('projects/<int:pk>/', views.project_detail, name='project_detail'),
     
     # API endpoints
     path('api/calendar-events/', views.api_calendar_events, name='api_calendar_events'),

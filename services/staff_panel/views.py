@@ -631,6 +631,243 @@ def team_management(request):
 
 @login_required
 @require_organization_access
+@require_staff_access
+def search_users(request):
+    """AJAX endpoint for searching users within organization"""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    search_term = request.GET.get('q', '').strip()
+    team_id = request.GET.get('team_id')
+    
+    if len(search_term) < 2:
+        return JsonResponse({'error': 'Search term must be at least 2 characters'}, status=400)
+    
+    # Search users by username, first name, last name, or email
+    users = UserProfile.objects.filter(
+        organization=organization,
+        is_active=True
+    ).filter(
+        Q(user__username__icontains=search_term) |
+        Q(user__first_name__icontains=search_term) |
+        Q(user__last_name__icontains=search_term) |
+        Q(user__email__icontains=search_term)
+    ).select_related('user')
+    
+    # Exclude users already in the team if team_id is provided
+    if team_id:
+        try:
+            team = Team.objects.get(id=team_id, organization=organization)
+            users = users.exclude(teams=team)
+        except Team.DoesNotExist:
+            pass
+    
+    # Limit to 20 results
+    users = users[:20]
+    
+    results = []
+    for user_profile in users:
+        user = user_profile.user
+        results.append({
+            'id': user_profile.id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'full_name': user.get_full_name() or user.username,
+            'email': user.email,
+            'initials': get_user_initials(user),
+            'department': user_profile.department or '',
+            'title': user_profile.title or ''
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'users': results,
+        'count': len(results)
+    })
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def add_team_member(request, team_id):
+    """AJAX endpoint for adding a member to a team"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        team = Team.objects.get(id=team_id, organization=organization)
+        user_profile_id = request.POST.get('user_id')
+        
+        if not user_profile_id:
+            return JsonResponse({'error': 'User ID is required'}, status=400)
+        
+        user_profile = UserProfile.objects.get(
+            id=user_profile_id, 
+            organization=organization,
+            is_active=True
+        )
+        
+        # Check if user is already in the team
+        if team.members.filter(id=user_profile.id).exists():
+            return JsonResponse({'error': 'User is already a member of this team'}, status=400)
+        
+        # Add user to team
+        team.members.add(user_profile)
+        
+        # Log the action
+        log_audit_action(
+            user=request.user,
+            action='update',
+            content_type='Team',
+            object_id=str(team.id),
+            object_repr=team.name,
+            changes={
+                'member_added': user_profile.user.get_full_name(),
+                'member_id': user_profile.id
+            },
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{user_profile.user.get_full_name()} added to team {team.name}',
+            'user': {
+                'id': user_profile.id,
+                'full_name': user_profile.user.get_full_name() or user_profile.user.username,
+                'email': user_profile.user.email,
+                'initials': get_user_initials(user_profile.user),
+                'department': user_profile.department or '',
+                'title': user_profile.title or ''
+            }
+        })
+        
+    except Team.DoesNotExist:
+        return JsonResponse({'error': 'Team not found'}, status=404)
+    except UserProfile.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def remove_team_member(request, team_id):
+    """AJAX endpoint for removing a member from a team"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        team = Team.objects.get(id=team_id, organization=organization)
+        user_profile_id = request.POST.get('user_id')
+        
+        if not user_profile_id:
+            return JsonResponse({'error': 'User ID is required'}, status=400)
+        
+        user_profile = UserProfile.objects.get(
+            id=user_profile_id, 
+            organization=organization
+        )
+        
+        # Check if user is in the team
+        if not team.members.filter(id=user_profile.id).exists():
+            return JsonResponse({'error': 'User is not a member of this team'}, status=400)
+        
+        # Remove user from team
+        team.members.remove(user_profile)
+        
+        # Log the action
+        log_audit_action(
+            user=request.user,
+            action='update',
+            content_type='Team',
+            object_id=str(team.id),
+            object_repr=team.name,
+            changes={
+                'member_removed': user_profile.user.get_full_name(),
+                'member_id': user_profile.id
+            },
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{user_profile.user.get_full_name()} removed from team {team.name}'
+        })
+        
+    except Team.DoesNotExist:
+        return JsonResponse({'error': 'Team not found'}, status=404)
+    except UserProfile.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def get_team_members(request, team_id):
+    """AJAX endpoint for getting current team members"""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        team = Team.objects.get(id=team_id, organization=organization)
+        members = team.members.filter(is_active=True).select_related('user')
+        
+        member_list = []
+        for member in members:
+            member_list.append({
+                'id': member.id,
+                'username': member.user.username,
+                'full_name': member.user.get_full_name() or member.user.username,
+                'email': member.user.email,
+                'initials': get_user_initials(member.user),
+                'department': member.department or '',
+                'title': member.title or '',
+                'is_manager': team.manager_id == member.id if team.manager else False
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'members': member_list,
+            'count': len(member_list),
+            'team_name': team.name
+        })
+        
+    except Team.DoesNotExist:
+        return JsonResponse({'error': 'Team not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def get_user_initials(user):
+    """Helper function to get user initials"""
+    if user.first_name and user.last_name:
+        return f"{user.first_name[0]}{user.last_name[0]}".upper()
+    elif user.first_name:
+        return user.first_name[0].upper()
+    elif user.last_name:
+        return user.last_name[0].upper()
+    else:
+        return user.username[0].upper() if user.username else '?'
+
+
+@login_required
+@require_organization_access
 @require_permission('user.manage_roles')
 def role_permissions(request):
     """Role and permissions management with CRUD operations"""
@@ -1783,3 +2020,442 @@ def create_custom_license(request):
             messages.error(request, f'Error creating custom license: {str(e)}')
     
     return redirect('staff_panel:license_management')
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def create_role(request):
+    """AJAX endpoint for creating a new role"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        # Handle both JSON and form data
+        if request.content_type == 'application/json':
+            import json
+            data = json.loads(request.body)
+            role_name = data.get('name', '').strip()
+            role_description = data.get('description', '').strip()
+            role_type = data.get('role_type', 'organization').strip()
+            color = data.get('color', '#0066cc').strip()
+        else:
+            role_name = request.POST.get('role_name', '').strip()
+            role_description = request.POST.get('role_description', '').strip()
+            role_type = request.POST.get('role_type', 'organization').strip()
+            color = request.POST.get('color', '#0066cc').strip()
+        
+        if not role_name:
+            return JsonResponse({'error': 'Role name is required'}, status=400)
+        
+        # Check if role name already exists
+        if Role.objects.filter(organization=organization, name=role_name).exists():
+            return JsonResponse({'error': 'A role with this name already exists'}, status=400)
+        
+        role = Role.objects.create(
+            name=role_name,
+            description=role_description,
+            role_type=role_type,
+            color=color,
+            organization=organization,
+            created_by=profile
+        )
+        
+        # Log the action
+        log_audit_action(
+            user=request.user,
+            action='create',
+            content_type='Role',
+            object_id=str(role.id),
+            object_repr=role.name,
+            changes={'name': role_name, 'description': role_description},
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Role "{role_name}" created successfully',
+            'role': {
+                'id': role.id,
+                'name': role.name,
+                'description': role.description,
+                'permission_count': 0,
+                'user_count': 0
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def edit_role(request, role_id):
+    """AJAX endpoint for editing a role"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        role = Role.objects.get(id=role_id, organization=organization)
+        
+        # Handle both JSON and form data
+        if request.content_type == 'application/json':
+            import json
+            data = json.loads(request.body)
+            role_name = data.get('name', '').strip()
+            role_description = data.get('description', '').strip()
+            role_type = data.get('role_type', role.role_type).strip()
+            color = data.get('color', role.color).strip()
+        else:
+            role_name = request.POST.get('role_name', '').strip()
+            role_description = request.POST.get('role_description', '').strip()
+            role_type = request.POST.get('role_type', role.role_type).strip()
+            color = request.POST.get('color', role.color).strip()
+        
+        if not role_name:
+            return JsonResponse({'error': 'Role name is required'}, status=400)
+        
+        # Check if role name already exists (excluding current role)
+        if Role.objects.filter(organization=organization, name=role_name).exclude(id=role_id).exists():
+            return JsonResponse({'error': 'A role with this name already exists'}, status=400)
+        
+        old_values = {
+            'name': role.name,
+            'description': role.description,
+            'role_type': role.role_type,
+            'color': role.color
+        }
+        
+        role.name = role_name
+        role.description = role_description
+        role.role_type = role_type
+        role.color = color
+        role.save()
+        
+        new_values = {
+            'name': role.name,
+            'description': role.description,
+            'role_type': role.role_type,
+            'color': role.color
+        }
+        
+        changes = {}
+        for key in old_values:
+            if old_values[key] != new_values[key]:
+                changes[key] = {'old': old_values[key], 'new': new_values[key]}
+        
+        log_audit_action(
+            user=request.user,
+            action='update',
+            content_type='Role',
+            object_id=str(role.id),
+            object_repr=role.name,
+            changes=changes,
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Role "{role_name}" updated successfully',
+            'role': {
+                'id': role.id,
+                'name': role.name,
+                'description': role.description
+            }
+        })
+        
+    except Role.DoesNotExist:
+        return JsonResponse({'error': 'Role not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def delete_role(request, role_id):
+    """AJAX endpoint for deleting a role"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        role = Role.objects.get(id=role_id, organization=organization)
+        
+        # Check if role has users assigned
+        user_count = role.user_assignments.filter(is_active=True).count()
+        if user_count > 0:
+            return JsonResponse({
+                'error': f'Cannot delete role "{role.name}" - it has {user_count} users assigned. Remove all users first.'
+            }, status=400)
+        
+        role_name = role.name
+        role.delete()
+        
+        log_audit_action(
+            user=request.user,
+            action='delete',
+            content_type='Role',
+            object_id=str(role_id),
+            object_repr=role_name,
+            changes={'deleted': True},
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Role "{role_name}" deleted successfully'
+        })
+        
+    except Role.DoesNotExist:
+        return JsonResponse({'error': 'Role not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def assign_role_permissions(request, role_id):
+    """AJAX endpoint for assigning permissions to a role"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        role = Role.objects.get(id=role_id, organization=organization)
+        permission_ids = request.POST.getlist('permissions')
+        
+        # Clear existing permissions
+        role.permissions.clear()
+        
+        # Add selected permissions
+        if permission_ids:
+            permissions = Permission.objects.filter(id__in=permission_ids)
+            for permission in permissions:
+                RolePermission.objects.create(
+                    role=role,
+                    permission=permission,
+                    granted_by=profile
+                )
+        
+        log_audit_action(
+            user=request.user,
+            action='update',
+            content_type='Role',
+            object_id=str(role.id),
+            object_repr=role.name,
+            changes={'permissions_updated': len(permission_ids)},
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Permissions updated for role "{role.name}"',
+            'permission_count': len(permission_ids)
+        })
+        
+    except Role.DoesNotExist:
+        return JsonResponse({'error': 'Role not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def get_role_users(request, role_id):
+    """AJAX endpoint for getting users assigned to a role"""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        role = Role.objects.get(id=role_id, organization=organization)
+        user_assignments = role.user_assignments.filter(is_active=True).select_related('user_profile__user')
+        
+        users = []
+        for assignment in user_assignments:
+            user_profile = assignment.user_profile
+            user = user_profile.user
+            users.append({
+                'id': user_profile.id,
+                'username': user.username,
+                'full_name': user.get_full_name() or user.username,
+                'email': user.email,
+                'initials': get_user_initials(user),
+                'department': user_profile.department or '',
+                'title': user_profile.title or '',
+                'assigned_at': assignment.assigned_at.isoformat(),
+                'assignment_id': assignment.id
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'users': users,
+            'count': len(users),
+            'role_name': role.name
+        })
+        
+    except Role.DoesNotExist:
+        return JsonResponse({'error': 'Role not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def assign_user_to_role(request, role_id):
+    """AJAX endpoint for assigning a user to a role"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        role = Role.objects.get(id=role_id, organization=organization)
+        
+        # Handle both JSON and form data
+        if request.content_type == 'application/json':
+            import json
+            data = json.loads(request.body)
+            user_profile_id = data.get('user_id')
+        else:
+            user_profile_id = request.POST.get('user_id')
+        
+        if not user_profile_id:
+            return JsonResponse({'error': 'User ID is required'}, status=400)
+        
+        user_profile = UserProfile.objects.get(
+            id=user_profile_id,
+            organization=organization,
+            is_active=True
+        )
+        
+        # Check if user already has this role
+        if UserRoleAssignment.objects.filter(
+            user_profile=user_profile,
+            role=role,
+            is_active=True
+        ).exists():
+            return JsonResponse({'error': 'User already has this role'}, status=400)
+        
+        # Check role user limit
+        if role.max_users:
+            current_users = role.user_assignments.filter(is_active=True).count()
+            if current_users >= role.max_users:
+                return JsonResponse({
+                    'error': f'Role "{role.name}" has reached its maximum user limit of {role.max_users}'
+                }, status=400)
+        
+        # Create role assignment
+        assignment = UserRoleAssignment.objects.create(
+            user_profile=user_profile,
+            role=role,
+            assigned_by=profile,
+            is_active=True
+        )
+        
+        log_audit_action(
+            user=request.user,
+            action='assign_role',
+            content_type='UserRoleAssignment',
+            object_id=str(assignment.id),
+            object_repr=f"{user_profile.user.get_full_name()} - {role.name}",
+            changes={
+                'role': role.name,
+                'user': user_profile.user.get_full_name()
+            },
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{user_profile.user.get_full_name()} assigned to role "{role.name}"',
+            'user': {
+                'id': user_profile.id,
+                'full_name': user_profile.user.get_full_name() or user_profile.user.username,
+                'email': user_profile.user.email,
+                'initials': get_user_initials(user_profile.user),
+                'department': user_profile.department or '',
+                'title': user_profile.title or ''
+            }
+        })
+        
+    except Role.DoesNotExist:
+        return JsonResponse({'error': 'Role not found'}, status=404)
+    except UserProfile.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_organization_access
+@require_staff_access
+def remove_user_from_role(request, role_id, user_id):
+    """AJAX endpoint for removing a user from a role"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    profile = get_user_profile(request)
+    organization = profile.organization
+    
+    try:
+        role = Role.objects.get(id=role_id, organization=organization)
+        user_profile = UserProfile.objects.get(
+            id=user_id,
+            organization=organization
+        )
+        
+        assignment = UserRoleAssignment.objects.get(
+            user_profile=user_profile,
+            role=role,
+            is_active=True
+        )
+        
+        assignment.is_active = False
+        assignment.save()
+        
+        log_audit_action(
+            user=request.user,
+            action='remove_role',
+            content_type='UserRoleAssignment',
+            object_id=str(assignment.id),
+            object_repr=f"{user_profile.user.get_full_name()} - {role.name}",
+            changes={
+                'role': role.name,
+                'user': user_profile.user.get_full_name(),
+                'removed': True
+            },
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{user_profile.user.get_full_name()} removed from role "{role.name}"'
+        })
+        
+    except Role.DoesNotExist:
+        return JsonResponse({'error': 'Role not found'}, status=404)
+    except UserProfile.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    except UserRoleAssignment.DoesNotExist:
+        return JsonResponse({'error': 'User is not assigned to this role'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
