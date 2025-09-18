@@ -70,9 +70,9 @@
                         <span>{{ workflow.created_at|date:"M j, Y" }}</span>
                     </div>
                     
-                    {% if workflow.created_by %}
+                    {% if workflow.owner_team %}
                         <div class="mt-3 text-xs text-gray-400">
-                            Created by {% if workflow.created_by.user %}{{ workflow.created_by.user.get_full_name|default:workflow.created_by.user.username }}{% else %}Unknown User{% endif %}
+                            Team: {{ workflow.owner_team.name }}
                         </div>
                     {% endif %}
                 </div>
