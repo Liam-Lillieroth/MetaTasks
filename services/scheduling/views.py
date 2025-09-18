@@ -766,7 +766,11 @@ def complete_booking_workflow_prompt(request, booking_uuid):
     """Prompt user for workflow action when completing a booking linked to a work item"""
     profile = get_user_profile(request)
     if not profile:
-        return JsonResponse({'error': 'User profile not found'}, status=400)
+        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'User profile not found'}, status=400)
+        else:
+            messages.error(request, 'User profile not found')
+            return redirect('scheduling:index')
     
     booking = get_object_or_404(
         BookingRequest, 
@@ -776,7 +780,11 @@ def complete_booking_workflow_prompt(request, booking_uuid):
     
     # Check if this booking should prompt for workflow update
     if not BookingWorkflowIntegration.should_prompt_workflow_update(booking):
-        return JsonResponse({'prompt_required': False})
+        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'prompt_required': False})
+        else:
+            # No workflow prompt needed, redirect to simple completion
+            return redirect('scheduling:complete_booking', booking_uuid=booking_uuid)
     
     # Get completion options
     work_item = BookingWorkflowIntegration.get_linked_work_item(booking)
@@ -812,25 +820,42 @@ def complete_booking_workflow_prompt(request, booking_uuid):
         else:
             messages.error(request, result.get('error', 'An error occurred'))
         
-        return JsonResponse(result)
+        # Check if this is an AJAX request
+        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse(result)
+        else:
+            # Regular form submission - redirect to booking detail page
+            return redirect('scheduling:booking_detail', booking_id=booking.id)
     
-    # GET request - return prompt data
-    return JsonResponse({
-        'prompt_required': True,
-        'booking': {
-            'uuid': str(booking.uuid),
-            'title': booking.title,
-            'description': booking.description,
-            'status': booking.status,
-        },
-        'work_item': {
-            'uuid': str(work_item.uuid),
-            'title': work_item.title,
-            'current_step': work_item.current_step.name,
-            'workflow_name': work_item.workflow.name,
-        } if work_item else None,
-        'completion_options': completion_options
-    })
+    # GET request - check if AJAX or regular request
+    if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # Return prompt data for AJAX requests
+        return JsonResponse({
+            'prompt_required': True,
+            'booking': {
+                'uuid': str(booking.uuid),
+                'title': booking.title,
+                'description': booking.description,
+                'status': booking.status,
+            },
+            'work_item': {
+                'uuid': str(work_item.uuid),
+                'title': work_item.title,
+                'current_step': work_item.current_step.name,
+                'workflow_name': work_item.workflow.name,
+            } if work_item else None,
+            'completion_options': completion_options
+        })
+    else:
+        # Regular GET request - render the template
+        context = {
+            'profile': profile,
+            'booking': booking,
+            'work_item': work_item,
+            'completion_options': completion_options,
+            'page_title': f'Complete Booking: {booking.title}',
+        }
+        return render(request, 'scheduling/complete_booking_workflow.html', context)
 
 
 @login_required
@@ -848,17 +873,26 @@ def complete_booking(request, booking_uuid):
     )
     
     if booking.status == 'completed':
-        return JsonResponse({'error': 'Booking is already completed'}, status=400)
+        error_msg = 'Booking is already completed'
+        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': error_msg}, status=400)
+        else:
+            messages.error(request, error_msg)
+            return redirect('scheduling:booking_detail', booking_id=booking.id)
     
     # Check if we should prompt for workflow action
     should_prompt = BookingWorkflowIntegration.should_prompt_workflow_update(booking)
     
     if should_prompt and request.method == 'GET':
         # Return prompt requirement instead of completing directly
-        return JsonResponse({
-            'requires_workflow_prompt': True,
-            'prompt_url': f'/services/scheduling/bookings/{booking_uuid}/complete-workflow/'
-        })
+        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'requires_workflow_prompt': True,
+                'prompt_url': f'/services/scheduling/bookings/{booking_uuid}/complete-workflow/'
+            })
+        else:
+            # Redirect to workflow prompt page
+            return redirect('scheduling:complete_booking_workflow', booking_uuid=booking_uuid)
     
     if request.method == 'POST':
         # Simple completion without workflow integration
@@ -883,11 +917,16 @@ def complete_booking(request, booking_uuid):
         
         messages.success(request, f'Booking "{booking.title}" completed successfully.')
         
-        return JsonResponse({
-            'success': True,
-            'message': 'Booking completed successfully',
-            'booking_status': booking.status
-        })
+        # Check if this is an AJAX request
+        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': True,
+                'message': 'Booking completed successfully',
+                'booking_status': booking.status
+            })
+        else:
+            # Regular form submission - redirect to booking detail page
+            return redirect('scheduling:booking_detail', booking_id=booking.id)
     
     # GET request for simple completion form
     context = {

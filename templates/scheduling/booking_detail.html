@@ -543,51 +543,49 @@ document.getElementById('completeForm').addEventListener('submit', function(e) {
     
     // First check if there's a workflow prompt needed
     fetch(`/services/scheduling/bookings/${bookingUuid}/complete-workflow/`)
-        .then(response => {
-            if (response.ok) {
-                // If we get a successful response, redirect to workflow prompt
+        .then(response => response.json())
+        .then(data => {
+            if (data.prompt_required) {
+                // Redirect to workflow prompt page
                 window.location.href = `/services/scheduling/bookings/${bookingUuid}/complete-workflow/`;
             } else {
-                // No workflow, complete directly
+                // No workflow prompt needed, complete directly
                 return fetch(`/services/scheduling/bookings/${bookingUuid}/complete/`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': getCookie('csrftoken')
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        'X-Requested-With': 'XMLHttpRequest'
                     },
                     body: `completion_notes=${encodeURIComponent(notes)}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        hideCompleteModal();
+                        // Show success message and reload
+                        const alertDiv = document.createElement('div');
+                        alertDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+                        alertDiv.innerHTML = `
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm">Booking completed successfully!</p>
+                                </div>
+                            </div>
+                        `;
+                        document.body.appendChild(alertDiv);
+                        
+                        // Reload page after 2 seconds
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown error occurred'));
+                    }
                 });
-            }
-        })
-        .then(response => {
-            if (response && response.ok) {
-                return response.json();
-            } else if (response) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-        })
-        .then(data => {
-            if (data && data.success) {
-                hideCompleteModal();
-                // Show success message and reload
-                const alertDiv = document.createElement('div');
-                alertDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
-                alertDiv.innerHTML = `
-                    <div class="flex">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-check-circle"></i>
-                        </div>
-                        <div class="ml-3">
-                            <p class="text-sm">Booking completed successfully!</p>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(alertDiv);
-                
-                // Reload page after 2 seconds
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
             }
         })
         .catch(error => {
