@@ -23,7 +23,41 @@
 
     <!-- Filters -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-        <form method="get" class="space-y-4">
+        <!-- Saved Filter Views Section -->
+        <div class="mb-6 pb-6 border-b border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-medium text-gray-900">Saved Filter Views</h3>
+                <button type="button" id="save-current-filter" 
+                        class="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1 rounded-md transition-colors">
+                    <i class="fas fa-save mr-1"></i>Save Current
+                </button>
+            </div>
+            
+            <div class="flex flex-wrap gap-2">
+                {% if saved_filter_views %}
+                    {% for saved_view in saved_filter_views %}
+                        <div class="filter-view-item flex items-center bg-gray-50 rounded-md">
+                            <a href="{% url 'cflows:apply_filter_view' saved_view.id %}" 
+                               class="px-3 py-1 text-sm text-gray-700 hover:text-purple-600 transition-colors
+                                      {% if matching_saved_view and matching_saved_view.id == saved_view.id %}font-semibold text-purple-600{% endif %}">
+                                <i class="fas fa-filter mr-1"></i>{{ saved_view.name }}
+                                {% if saved_view.is_default %}<i class="fas fa-star text-yellow-500 ml-1"></i>{% endif %}
+                            </a>
+                            <button type="button" class="delete-filter-view px-2 py-1 text-gray-400 hover:text-red-600 transition-colors" 
+                                    data-filter-view-id="{{ saved_view.id }}" 
+                                    data-filter-view-name="{{ saved_view.name }}">
+                                <i class="fas fa-times text-xs"></i>
+                            </button>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-sm text-gray-500 italic">No saved filter views yet. Apply some filters and click "Save Current" to create one.</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <form method="get" class="space-y-4" id="filters-form">
+            {% csrf_token %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
                 <!-- Search -->
                 <div class="xl:col-span-2">
@@ -357,6 +391,91 @@ function updateBookingIndicator(indicator, data) {
     }
     
     indicator.innerHTML = html;
+}
+
+// Saved Filter Views Management
+document.addEventListener('DOMContentLoaded', function() {
+    // Save current filter
+    const saveFilterBtn = document.getElementById('save-current-filter');
+    if (saveFilterBtn) {
+        saveFilterBtn.addEventListener('click', function() {
+            const filterName = prompt('Enter a name for this filter view:');
+            if (filterName && filterName.trim()) {
+                saveCurrentFilter(filterName.trim());
+            }
+        });
+    }
+    
+    // Delete filter views
+    const deleteButtons = document.querySelectorAll('.delete-filter-view');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const filterId = this.getAttribute('data-filter-view-id');
+            const filterName = this.getAttribute('data-filter-view-name');
+            
+            if (confirm(`Are you sure you want to delete the filter view "${filterName}"?`)) {
+                deleteFilterView(filterId);
+            }
+        });
+    });
+});
+
+function saveCurrentFilter(name) {
+    const form = document.getElementById('filters-form');
+    const formData = new FormData(form);
+    formData.append('name', name);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    fetch('{% url "cflows:save_filter_view" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload the page to show the new filter view
+            window.location.reload();
+        } else {
+            let errorMsg = 'Error saving filter view.';
+            if (data.errors && data.errors.name) {
+                errorMsg = data.errors.name[0];
+            }
+            alert(errorMsg);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving filter view:', error);
+        alert('Error saving filter view. Please try again.');
+    });
+}
+
+function deleteFilterView(filterId) {
+    fetch(`/services/cflows/work-items/filter-views/${filterId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Remove the filter view from the DOM
+            window.location.reload();
+        } else {
+            alert('Error deleting filter view: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting filter view:', error);
+        alert('Error deleting filter view. Please try again.');
+    });
 }
 </script>
 {% endblock %}

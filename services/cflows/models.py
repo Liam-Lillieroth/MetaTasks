@@ -1518,3 +1518,57 @@ class CalendarView(models.Model):
         if self.is_default:
             CalendarView.objects.filter(user=self.user, is_default=True).update(is_default=False)
         super().save(*args, **kwargs)
+
+
+class WorkItemFilterView(models.Model):
+    """Saved work item filter views for users"""
+    name = models.CharField(max_length=100)
+    user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='saved_work_item_filter_views')
+    is_default = models.BooleanField(default=False)
+    
+    # Filter settings (stored as JSON to match the current filter structure)
+    workflow = models.CharField(max_length=20, blank=True)  # Workflow ID as string
+    assignee = models.CharField(max_length=20, blank=True)  # Assignee ID as string
+    priority = models.CharField(max_length=20, blank=True)  # Priority value
+    status = models.CharField(max_length=20, blank=True)  # Status value (active/completed)
+    search = models.CharField(max_length=200, blank=True)  # Search term
+    sort = models.CharField(max_length=50, default='-updated_at')  # Sort field
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['user', 'name']
+        ordering = ['name']
+    
+    def __str__(self):
+        return f"{self.name} ({self.user})"
+    
+    def save(self, *args, **kwargs):
+        # If this is being set as default, unset other defaults for this user
+        if self.is_default:
+            WorkItemFilterView.objects.filter(user=self.user, is_default=True).update(is_default=False)
+        super().save(*args, **kwargs)
+    
+    def to_filter_dict(self):
+        """Convert saved filter to dictionary format used by the view"""
+        return {
+            'workflow': self.workflow,
+            'assignee': self.assignee,
+            'priority': self.priority,
+            'status': self.status,
+            'search': self.search,
+            'sort': self.sort,
+        }
+    
+    @classmethod
+    def from_request_params(cls, params):
+        """Create filter data from request parameters"""
+        return {
+            'workflow': params.get('workflow', ''),
+            'assignee': params.get('assignee', ''),
+            'priority': params.get('priority', ''),
+            'status': params.get('status', ''),
+            'search': params.get('search', ''),
+            'sort': params.get('sort', '-updated_at'),
+        }

@@ -58,6 +58,12 @@ urlpatterns = [
     path('work-items/create/', views.create_work_item_select_workflow, name='create_work_item_select_workflow'),
     path('workflows/<int:workflow_id>/work-items/create/', views.create_work_item, name='create_work_item'),
     
+    # Work Item Filter Views
+    path('work-items/filter-views/save/', views.save_filter_view, name='save_filter_view'),
+    path('work-items/filter-views/<int:filter_view_id>/apply/', views.apply_filter_view, name='apply_filter_view'),
+    path('work-items/filter-views/<int:filter_view_id>/update/', views.update_filter_view, name='update_filter_view'),
+    path('work-items/filter-views/<int:filter_view_id>/delete/', views.delete_filter_view, name='delete_filter_view'),
+    
     # Work Item Transitions
     path('work-items/<int:work_item_id>/transition/<int:transition_id>/', transition_views.transition_work_item, name='transition_work_item'),
     path('work-items/<int:work_item_id>/transition/<int:transition_id>/form/', transition_views.transition_form, name='transition_form'),

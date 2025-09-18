@@ -6,7 +6,7 @@ from core.models import Organization, UserProfile, Team, JobType
 from .models import (
     Workflow, WorkflowStep, WorkflowTransition, WorkflowTemplate,
     WorkItem, WorkItemComment, WorkItemAttachment, TeamBooking,
-    CustomField
+    CustomField, WorkItemFilterView
 )
 import json
 
@@ -1495,3 +1495,94 @@ class WorkflowCreationForm(forms.ModelForm):
             self.save_m2m()
         
         return instance
+
+
+class WorkItemFilterViewForm(forms.ModelForm):
+    """Form for creating and editing saved work item filter views"""
+    
+    class Meta:
+        model = WorkItemFilterView
+        fields = ['name', 'is_default']
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500',
+                'placeholder': 'Enter filter view name'
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+    
+    def clean_name(self):
+        name = self.cleaned_data['name']
+        if self.user:
+            # Check for duplicate names for this user (excluding current instance)
+            existing = WorkItemFilterView.objects.filter(
+                user=self.user, 
+                name__iexact=name
+            )
+            if self.instance.pk:
+                existing = existing.exclude(pk=self.instance.pk)
+            
+            if existing.exists():
+                raise ValidationError('A filter view with this name already exists.')
+        
+        return name
+    
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.user:
+            instance.user = self.user
+        
+        if commit:
+            instance.save()
+        
+        return instance
+
+
+class SaveFilterViewForm(forms.Form):
+    """Form for saving current filter state as a new filter view"""
+    name = forms.CharField(
+        max_length=100,
+        widget=forms.TextInput(attrs={
+            'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500',
+            'placeholder': 'Enter filter view name'
+        })
+    )
+    is_default = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded'
+        })
+    )
+    
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        self.filter_data = kwargs.pop('filter_data', {})
+        super().__init__(*args, **kwargs)
+    
+    def clean_name(self):
+        name = self.cleaned_data['name']
+        if self.user:
+            if WorkItemFilterView.objects.filter(user=self.user, name__iexact=name).exists():
+                raise ValidationError('A filter view with this name already exists.')
+        return name
+    
+    def save(self):
+        if not self.user:
+            return None
+        
+        filter_view = WorkItemFilterView.objects.create(
+            name=self.cleaned_data['name'],
+            user=self.user,
+            is_default=self.cleaned_data['is_default'],
+            workflow=self.filter_data.get('workflow', ''),
+            assignee=self.filter_data.get('assignee', ''),
+            priority=self.filter_data.get('priority', ''),
+            status=self.filter_data.get('status', ''),
+            search=self.filter_data.get('search', ''),
+            sort=self.filter_data.get('sort', '-updated_at'),
+        )
+        
+        return filter_view

@@ -13,13 +13,15 @@ from core.decorators import require_permission
 from .models import (
     Workflow, WorkflowStep, WorkflowTransition, WorkflowTemplate,
     WorkItem, WorkItemHistory, WorkItemComment, WorkItemAttachment,
-    WorkItemRevision, TeamBooking, CustomField, WorkItemCustomFieldValue
+    WorkItemRevision, TeamBooking, CustomField, WorkItemCustomFieldValue,
+    WorkItemFilterView
 )
 from .forms import (
     WorkflowForm, WorkflowStepForm, WorkItemForm, WorkItemCommentForm,
     WorkItemAttachmentForm, WorkflowTransitionForm, TeamBookingForm,
     CustomFieldForm, TeamForm, WorkflowCreationForm, BulkTransitionForm,
-    WorkflowFieldConfigForm, SchedulingBookingForm
+    WorkflowFieldConfigForm, SchedulingBookingForm, WorkItemFilterViewForm,
+    SaveFilterViewForm
 )
 import json
 from django.views.decorators.http import require_GET
@@ -393,11 +395,24 @@ def work_items_list(request):
         organization=profile.organization, user__is_active=True
     ).order_by('user__first_name', 'user__last_name')
     
+    # Get saved filter views for current user
+    saved_filter_views = WorkItemFilterView.objects.filter(user=profile).order_by('name')
+    
+    # Check if current filters match any saved view
+    current_filter_params = WorkItemFilterView.from_request_params(request.GET)
+    matching_saved_view = None
+    for saved_view in saved_filter_views:
+        if saved_view.to_filter_dict() == current_filter_params:
+            matching_saved_view = saved_view
+            break
+    
     context = {
         'profile': profile,
         'page_obj': page_obj,
         'workflows': workflows,
         'assignees': assignees,
+        'saved_filter_views': saved_filter_views,
+        'matching_saved_view': matching_saved_view,
         'current_filters': {
             'workflow': workflow_id if workflow_id and workflow_id.strip() else '',
             'assignee': assignee_id if assignee_id and assignee_id.strip() else '',
@@ -409,6 +424,139 @@ def work_items_list(request):
     }
     
     return render(request, 'cflows/work_items_list.html', context)
+
+
+@login_required
+@require_organization_access
+@require_POST
+def save_filter_view(request):
+    """Save current work item filters as a named view"""
+    profile = get_user_profile(request)
+    if not profile:
+        return JsonResponse({'success': False, 'error': 'No user profile found'})
+    
+    # Get filter data from request
+    filter_data = WorkItemFilterView.from_request_params(request.POST)
+    
+    form = SaveFilterViewForm(
+        request.POST, 
+        user=profile, 
+        filter_data=filter_data
+    )
+    
+    if form.is_valid():
+        filter_view = form.save()
+        return JsonResponse({
+            'success': True,
+            'filter_view': {
+                'id': filter_view.id,
+                'name': filter_view.name,
+                'is_default': filter_view.is_default
+            }
+        })
+    else:
+        return JsonResponse({
+            'success': False,
+            'errors': form.errors
+        })
+
+
+@login_required
+@require_organization_access
+@require_POST
+def delete_filter_view(request, filter_view_id):
+    """Delete a saved filter view"""
+    profile = get_user_profile(request)
+    if not profile:
+        return JsonResponse({'success': False, 'error': 'No user profile found'})
+    
+    try:
+        filter_view = WorkItemFilterView.objects.get(
+            id=filter_view_id, 
+            user=profile
+        )
+        filter_view.delete()
+        return JsonResponse({'success': True})
+    except WorkItemFilterView.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Filter view not found'})
+
+
+@login_required
+@require_organization_access
+def apply_filter_view(request, filter_view_id):
+    """Apply a saved filter view and redirect to work items list"""
+    profile = get_user_profile(request)
+    if not profile:
+        return redirect('cflows:work_items_list')
+    
+    try:
+        filter_view = WorkItemFilterView.objects.get(
+            id=filter_view_id, 
+            user=profile
+        )
+        
+        # Build query parameters from filter view
+        params = {}
+        filter_dict = filter_view.to_filter_dict()
+        
+        for key, value in filter_dict.items():
+            if value:  # Only include non-empty values
+                params[key] = value
+        
+        # Build redirect URL with query parameters
+        from django.urls import reverse
+        from urllib.parse import urlencode
+        
+        url = reverse('cflows:work_items_list')
+        if params:
+            url += '?' + urlencode(params)
+        
+        return redirect(url)
+        
+    except WorkItemFilterView.DoesNotExist:
+        messages.error(request, 'Filter view not found.')
+        return redirect('cflows:work_items_list')
+
+
+@login_required
+@require_organization_access
+@require_POST
+def update_filter_view(request, filter_view_id):
+    """Update a saved filter view"""
+    profile = get_user_profile(request)
+    if not profile:
+        return JsonResponse({'success': False, 'error': 'No user profile found'})
+    
+    try:
+        filter_view = WorkItemFilterView.objects.get(
+            id=filter_view_id, 
+            user=profile
+        )
+        
+        form = WorkItemFilterViewForm(
+            request.POST, 
+            instance=filter_view, 
+            user=profile
+        )
+        
+        if form.is_valid():
+            form.save()
+            return JsonResponse({
+                'success': True,
+                'filter_view': {
+                    'id': filter_view.id,
+                    'name': filter_view.name,
+                    'is_default': filter_view.is_default
+                }
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'errors': form.errors
+            })
+            
+    except WorkItemFilterView.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Filter view not found'})
 
 
 @login_required
