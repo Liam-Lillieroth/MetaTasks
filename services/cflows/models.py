@@ -39,6 +39,16 @@ class Workflow(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     
+    # Workflow hierarchy
+    parent_workflow = models.ForeignKey(
+        'self', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True, 
+        related_name='sub_workflows',
+        help_text="Parent workflow - leave empty for top-level workflows"
+    )
+    
     # Template relationship
     template = models.ForeignKey(WorkflowTemplate, on_delete=models.SET_NULL, null=True, blank=True, related_name='workflows')
     
@@ -82,11 +92,53 @@ class Workflow(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        unique_together = ['organization', 'name']
+        # Allow same workflow names under different parent workflows
+        unique_together = [['organization', 'name', 'parent_workflow']]
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['organization', 'is_active']),
+            models.Index(fields=['parent_workflow']),
+        ]
     
     def __str__(self):
+        if self.parent_workflow:
+            return f"{self.parent_workflow.name} > {self.name}"
+        return f"{self.name}"
+    
+    @property
+    def unique_display_name(self):
+        """Get a unique display name including organization context"""
+        if self.parent_workflow:
+            return f"{self.parent_workflow.name} > {self.name} ({self.organization.name})"
         return f"{self.name} ({self.organization.name})"
+    
+    @property
+    def full_hierarchy_name(self):
+        """Get the full hierarchical name of the workflow"""
+        if self.parent_workflow:
+            return f"{self.parent_workflow.full_hierarchy_name} > {self.name}"
+        return self.name
+    
+    @property
+    def is_parent_workflow(self):
+        """Check if this workflow has sub-workflows"""
+        return self.sub_workflows.exists()
+    
+    def get_all_sub_workflows(self, include_self=True):
+        """Get all sub-workflows recursively"""
+        workflows = [self] if include_self else []
+        for sub_workflow in self.sub_workflows.all():
+            workflows.extend(sub_workflow.get_all_sub_workflows(include_self=True))
+        return workflows
+    
+    def get_workflow_path(self):
+        """Get the hierarchical path to this workflow"""
+        path = []
+        current = self
+        while current:
+            path.insert(0, current)
+            current = current.parent_workflow
+        return path
     
     def can_user_view(self, user_profile):
         """Check if a user can view this workflow"""

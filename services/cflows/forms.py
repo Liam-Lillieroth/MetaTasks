@@ -17,7 +17,7 @@ class WorkflowForm(forms.ModelForm):
     class Meta:
         model = Workflow
         fields = [
-            'name', 'description', 'template', 'is_shared', 
+            'name', 'description', 'parent_workflow', 'template', 'is_shared', 
             'auto_assign', 'requires_approval', 'owner_team',
             'allowed_view_teams', 'allowed_edit_teams'
         ]
@@ -30,6 +30,9 @@ class WorkflowForm(forms.ModelForm):
                 'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500',
                 'placeholder': 'Describe this workflow...',
                 'rows': 3
+            }),
+            'parent_workflow': forms.Select(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500'
             }),
             'template': forms.Select(attrs={
                 'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500'
@@ -66,6 +69,23 @@ class WorkflowForm(forms.ModelForm):
             self.fields['template'].queryset = WorkflowTemplate.objects.filter(
                 models.Q(is_public=True) | models.Q(created_by_org=organization)
             )
+            
+            # Filter parent workflows to only those in the organization (exclude self if editing)
+            parent_workflows = Workflow.objects.filter(organization=organization)
+            if self.instance and self.instance.pk:
+                # Exclude self and any descendants to prevent circular references
+                descendants = self.instance.get_all_sub_workflows(include_self=True)
+                descendant_ids = [w.id for w in descendants]
+                parent_workflows = parent_workflows.exclude(id__in=descendant_ids)
+            
+            # Create hierarchical choices for parent workflows
+            parent_choices = [('', 'No parent workflow (top-level)')]
+            for workflow in parent_workflows.filter(parent_workflow__isnull=True):
+                parent_choices.append((workflow.id, workflow.name))
+                for sub_workflow in workflow.sub_workflows.all():
+                    parent_choices.append((sub_workflow.id, f"{workflow.name} > {sub_workflow.name}"))
+            
+            self.fields['parent_workflow'].choices = parent_choices
             
             # Filter teams to only those in the organization
             organization_teams = Team.objects.filter(organization=organization)

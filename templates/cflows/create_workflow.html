@@ -13,42 +13,143 @@
         </div>
         
         <div class="px-6 py-8">
-            <!-- Info Box -->
-            <div class="mb-8 bg-blue-50 border-l-4 border-blue-400 p-4">
-                <div class="flex">
-                    <div class="flex-shrink-0">
-                        <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
-                        </svg>
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+                
+                <!-- Basic Information -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-medium text-gray-900">Basic Information</h3>
+                    
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                Workflow Name <span class="text-red-500">*</span>
+                            </label>
+                            {{ form.name }}
+                            {% if form.name.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.name.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        <div>
+                            <label for="{{ form.parent_workflow.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                Parent Workflow
+                            </label>
+                            {{ form.parent_workflow }}
+                            <p class="mt-1 text-xs text-gray-500">Leave empty to create a top-level workflow, or select a parent to create a sub-workflow.</p>
+                            {% if form.parent_workflow.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.parent_workflow.errors.0 }}</p>
+                            {% endif %}
+                        </div>
                     </div>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-blue-800">Workflow Builder Coming Soon!</h3>
-                        <div class="mt-2 text-sm text-blue-700">
-                            <p class="mb-2">The visual workflow builder is currently in development. For now, you can:</p>
-                            <ul class="list-disc pl-5 space-y-1">
-                                <li>Use the Django admin panel to create workflows, steps, and transitions</li>
-                                <li>Define custom data schemas for each step</li>
-                                <li>Set up team assignments and booking requirements</li>
-                                <li>Configure conditional transitions between steps</li>
-                            </ul>
+                    
+                    <div>
+                        <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                            Description
+                        </label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.description.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Team Assignment -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-medium text-gray-900">Team Assignment</h3>
+                    
+                    <div>
+                        <label for="{{ form.owner_team.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                            Owner Team <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.owner_team }}
+                        <p class="mt-1 text-xs text-gray-500">The team that owns and manages this workflow.</p>
+                        {% if form.owner_team.errors %}
+                            <p class="mt-1 text-sm text-red-600">{{ form.owner_team.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="{{ form.allowed_view_teams.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                Teams with View Access
+                            </label>
+                            {{ form.allowed_view_teams }}
+                            <p class="mt-1 text-xs text-gray-500">Teams that can view this workflow and its work items.</p>
+                            {% if form.allowed_view_teams.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.allowed_view_teams.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        <div>
+                            <label for="{{ form.allowed_edit_teams.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                Teams with Edit Access
+                            </label>
+                            {{ form.allowed_edit_teams }}
+                            <p class="mt-1 text-xs text-gray-500">Teams that can edit this workflow and create work items.</p>
+                            {% if form.allowed_edit_teams.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.allowed_edit_teams.errors.0 }}</p>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Sample Workflow Examples -->
-            <div class="space-y-6">
-                <h3 class="text-lg font-semibold text-gray-900">Sample Workflow Templates</h3>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Car Dealership Workflow -->
-                    <div class="border border-gray-200 rounded-lg p-6">
-                        <div class="flex items-center mb-4">
-                            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                </svg>
-                            </div>
+
+                <!-- Advanced Options -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-medium text-gray-900">Advanced Options</h3>
+                    
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="{{ form.template.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                Workflow Template
+                            </label>
+                            {{ form.template }}
+                            {% if form.template.errors %}
+                                <p class="mt-1 text-sm text-red-600">{{ form.template.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div class="flex items-center">
+                            {{ form.auto_assign }}
+                            <label for="{{ form.auto_assign.id_for_label }}" class="ml-2 text-sm text-gray-700">
+                                Auto-assign work items to team members
+                            </label>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            {{ form.requires_approval }}
+                            <label for="{{ form.requires_approval.id_for_label }}" class="ml-2 text-sm text-gray-700">
+                                Workflow changes require approval
+                            </label>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            {{ form.is_shared }}
+                            <label for="{{ form.is_shared.id_for_label }}" class="ml-2 text-sm text-gray-700">
+                                Share with other organizations
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'cflows:workflows_list' %}" 
+                       class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">
+                        Cancel
+                    </a>
+                    <button type="submit" 
+                            class="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md">
+                        Create Workflow
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
                             <h4 class="text-lg font-medium text-gray-900">Vehicle Processing</h4>
                         </div>
                         <p class="text-sm text-gray-600 mb-4">Complete vehicle lifecycle from acquisition to sale</p>
