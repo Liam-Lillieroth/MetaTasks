@@ -45,6 +45,11 @@
                                                 <span class="mx-2">•</span>
                                                 <i class="fas fa-tasks mr-1"></i>
                                                 {{ workflow.work_items.count }} work item{{ workflow.work_items.count|pluralize }}
+                                                {% if workflow.owner_team %}
+                                                    <span class="mx-2">•</span>
+                                                    <i class="fas fa-users mr-1"></i>
+                                                    Team: {{ workflow.owner_team.name }}{% if workflow.owner_team.parent_team %} of {{ workflow.owner_team.parent_team.name }}{% endif %}
+                                                {% endif %}
                                             </div>
                                         </div>
                                     </div>

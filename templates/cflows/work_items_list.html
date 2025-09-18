@@ -41,7 +41,7 @@
                         <option value="">All Workflows</option>
                         {% for workflow in workflows %}
                             <option value="{{ workflow.id }}" {% if current_filters.workflow|default_if_none:"" == workflow.id|stringformat:"s" %}selected{% endif %}>
-                                {{ workflow.name }}
+                                {{ workflow.name }}{% if workflow.owner_team %} (Team: {{ workflow.owner_team.name }}{% if workflow.owner_team.parent_team %} of {{ workflow.owner_team.parent_team.name }}{% endif %}){% endif %}
                             </option>
                         {% endfor %}
                     </select>
@@ -149,6 +149,12 @@
                                         
                                         <div class="flex items-center space-x-4 text-sm text-gray-500 mt-1">
                                             <span>{{ item.workflow.name }}</span>
+                                            {% if item.workflow.owner_team %}
+                                                <span>•</span>
+                                                <span class="text-xs">
+                                                    Team: {{ item.workflow.owner_team.name }}{% if item.workflow.owner_team.parent_team %} of {{ item.workflow.owner_team.parent_team.name }}{% endif %}
+                                                </span>
+                                            {% endif %}
                                             <span>•</span>
                                             <span>{{ item.current_step.name }}</span>
                                             <span>•</span>
@@ -284,7 +290,8 @@
                         <div class="flex flex-wrap justify-center gap-2">
                             {% for workflow in workflows %}
                                 <a href="{% url 'cflows:create_work_item' workflow.id %}" 
-                                   class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition-colors">
+                                   class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                                   title="{% if workflow.owner_team %}Team: {{ workflow.owner_team.name }}{% if workflow.owner_team.parent_team %} of {{ workflow.owner_team.parent_team.name }}{% endif %}{% endif %}">
                                     {{ workflow.name }}
                                 </a>
                             {% endfor %}
