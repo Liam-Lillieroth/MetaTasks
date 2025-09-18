@@ -67,6 +67,11 @@ urlpatterns = [
     path('work-items/<int:work_item_id>/priority/', transition_views.update_work_item_priority, name='update_work_item_priority'),
     path('work-items/<int:work_item_id>/transitions/', transition_views.get_available_transitions, name='get_available_transitions'),
     
+    # Work Item Transfer
+    path('work-items/<uuid:uuid>/transfer/', views.transfer_work_item, name='transfer_work_item'),
+    path('api/workflows/<int:workflow_id>/steps/', views.get_workflow_steps_api, name='get_workflow_steps_api'),
+    path('api/debug/user-info/', views.debug_user_info, name='debug_user_info'),
+    
     # Work Item Booking Integration
     path('work-items/<int:work_item_id>/create-booking/', views.create_booking_from_work_item, name='create_booking_from_work_item'),
     path('work-items/<int:work_item_id>/bookings/status/', views.work_item_bookings_status, name='work_item_bookings_status'),

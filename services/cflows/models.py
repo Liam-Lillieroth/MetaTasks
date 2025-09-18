@@ -443,6 +443,13 @@ class WorkItem(models.Model):
     is_completed = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
     
+    # Step timing tracking
+    current_step_entered_at = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        help_text="When this work item entered the current step"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -452,6 +459,49 @@ class WorkItem(models.Model):
     
     def __str__(self):
         return f"{self.title} ({self.workflow.name})"
+    
+    @property
+    def days_on_current_step(self):
+        """Calculate how many days this work item has been on the current step"""
+        if not self.current_step_entered_at:
+            return None
+        
+        from django.utils import timezone
+        delta = timezone.now() - self.current_step_entered_at
+        return delta.days
+    
+    @property 
+    def hours_on_current_step(self):
+        """Calculate how many hours this work item has been on the current step"""
+        if not self.current_step_entered_at:
+            return None
+            
+        from django.utils import timezone
+        delta = timezone.now() - self.current_step_entered_at
+        return round(delta.total_seconds() / 3600, 1)
+    
+    @property
+    def current_step_duration_display(self):
+        """Get a human-readable display of time on current step"""
+        if not self.current_step_entered_at:
+            return "Unknown"
+            
+        from django.utils import timezone
+        delta = timezone.now() - self.current_step_entered_at
+        days = delta.days
+        hours = round((delta.total_seconds() % 86400) / 3600)
+        
+        if days > 0:
+            if hours > 0:
+                return f"{days} day{'s' if days != 1 else ''}, {hours} hour{'s' if hours != 1 else ''}"
+            else:
+                return f"{days} day{'s' if days != 1 else ''}"
+        elif delta.total_seconds() >= 3600:
+            total_hours = round(delta.total_seconds() / 3600, 1)
+            return f"{total_hours} hour{'s' if total_hours != 1 else ''}"
+        else:
+            minutes = round(delta.total_seconds() / 60)
+            return f"{minutes} minute{'s' if minutes != 1 else ''}"
     
     def get_available_backward_steps(self):
         """Get steps that this work item can be moved back to based on history"""
@@ -518,6 +568,265 @@ class WorkItem(models.Model):
             user_profile.has_staff_panel_access or
             self.created_by == user_profile
         )
+
+    def transfer_to_workflow(self, destination_workflow, destination_step, transferred_by, notes="", preserve_assignee=False):
+        """
+        Transfer this work item to a different workflow while preserving history and handling bookings
+        
+        Args:
+            destination_workflow: Target Workflow instance
+            destination_step: Target WorkflowStep instance in the destination workflow
+            transferred_by: UserProfile instance of the person performing the transfer
+            notes: Optional notes about the transfer
+            preserve_assignee: Whether to keep current assignee (if they have access to destination workflow)
+        
+        Returns:
+            dict: Result of the transfer operation with success status and messages
+        """
+        from services.scheduling.models import BookingRequest
+        
+        # Validate inputs
+        if destination_workflow == self.workflow:
+            return {
+                'success': False,
+                'error': 'Cannot transfer work item to the same workflow',
+                'messages': []
+            }
+        
+        if destination_step.workflow != destination_workflow:
+            return {
+                'success': False,
+                'error': 'Destination step does not belong to destination workflow',
+                'messages': []
+            }
+        
+        # Store original values for history
+        old_workflow = self.workflow
+        old_step = self.current_step
+        old_assignee = self.current_assignee
+        
+        messages = []
+        
+        try:
+            # Handle bookings first - Update CFlows bookings
+            cflows_bookings = self.bookings.all()
+            cflows_bookings_count = cflows_bookings.count()
+            
+            if cflows_bookings_count > 0:
+                # Update all CFlows bookings to reference the new workflow
+                updated_count = 0
+                for booking in cflows_bookings:
+                    # Find a suitable step in the destination workflow for booking
+                    # Try to match by name first, otherwise use the destination step
+                    matching_step = destination_workflow.steps.filter(
+                        name__iexact=booking.workflow_step.name
+                    ).first()
+                    
+                    if not matching_step:
+                        matching_step = destination_step
+                    
+                    booking.workflow_step = matching_step
+                    booking.save()
+                    updated_count += 1
+                
+                messages.append(f"Updated {updated_count} CFlows booking(s) to new workflow")
+            
+            # Handle Scheduling service bookings
+            try:
+                scheduling_bookings = BookingRequest.objects.filter(
+                    source_service='cflows',
+                    source_object_type='WorkItem',
+                    source_object_id=str(self.id),
+                    organization=self.workflow.organization
+                )
+                scheduling_bookings_count = scheduling_bookings.count()
+                
+                if scheduling_bookings_count > 0:
+                    # Update custom_data to reflect new workflow
+                    for booking in scheduling_bookings:
+                        if not booking.custom_data:
+                            booking.custom_data = {}
+                        
+                        # Update workflow references in custom data
+                        booking.custom_data.update({
+                            'transferred_from_workflow': old_workflow.name,
+                            'transferred_to_workflow': destination_workflow.name,
+                            'transfer_date': timezone.now().isoformat(),
+                            'transferred_by': transferred_by.user.username,
+                            'workflow_id': destination_workflow.id,
+                            'workflow_step_name': destination_step.name
+                        })
+                        booking.save()
+                    
+                    messages.append(f"Updated {scheduling_bookings_count} scheduling booking(s) metadata")
+                
+            except Exception as e:
+                # Don't fail the transfer if scheduling service has issues
+                messages.append(f"Warning: Could not update scheduling bookings: {str(e)}")
+            
+            # Update work item
+            self.workflow = destination_workflow
+            self.current_step = destination_step
+            self.current_step_entered_at = timezone.now()
+            
+            # Handle assignee - clear if preserve_assignee is False or assignee doesn't have access
+            if not preserve_assignee or not old_assignee:
+                self.current_assignee = None
+            else:
+                # Check if old assignee has access to destination workflow
+                assignee_has_access = (
+                    old_assignee.is_organization_admin or
+                    (destination_workflow.owner_team and 
+                     old_assignee in destination_workflow.owner_team.members.all())
+                )
+                if not assignee_has_access:
+                    self.current_assignee = None
+                    messages.append(f"Cleared assignee {old_assignee.user.username} - no access to destination workflow")
+            
+            # Reset completion status if destination step is not terminal
+            if not destination_step.is_terminal and self.is_completed:
+                self.is_completed = False
+                self.completed_at = None
+                messages.append("Reset completion status for non-terminal destination step")
+            
+            self.save()
+            
+            # Create history entry for the transfer
+            history_entry = WorkItemHistory.objects.create(
+                work_item=self,
+                from_step=old_step,
+                to_step=destination_step,
+                changed_by=transferred_by,
+                notes=f"Transferred from '{old_workflow.name}' to '{destination_workflow.name}': {notes}".strip(),
+                data_snapshot=self.data.copy()
+            )
+            
+            # Add system comment about the transfer
+            WorkItemComment.objects.create(
+                work_item=self,
+                content=f"🔄 Work item transferred from **{old_workflow.name}** → **{destination_workflow.name}**\n\n"
+                       f"**From:** {old_step.name}\n"
+                       f"**To:** {destination_step.name}\n"
+                       f"**Transferred by:** {transferred_by.user.get_full_name() or transferred_by.user.username}\n"
+                       + (f"**Notes:** {notes}" if notes else ""),
+                author=transferred_by,
+                is_system_comment=True
+            )
+            
+            # Add transfer-specific data to work item
+            if not self.data:
+                self.data = {}
+            
+            transfer_history = self.data.get('transfer_history', [])
+            transfer_history.append({
+                'from_workflow_id': old_workflow.id,
+                'from_workflow_name': old_workflow.name,
+                'from_step_id': old_step.id,
+                'from_step_name': old_step.name,
+                'to_workflow_id': destination_workflow.id,
+                'to_workflow_name': destination_workflow.name,
+                'to_step_id': destination_step.id,
+                'to_step_name': destination_step.name,
+                'transferred_by': transferred_by.user.username,
+                'transferred_at': timezone.now().isoformat(),
+                'notes': notes,
+                'bookings_transferred': cflows_bookings_count + (scheduling_bookings_count if 'scheduling_bookings_count' in locals() else 0)
+            })
+            
+            self.data['transfer_history'] = transfer_history
+            self.save(update_fields=['data'])
+            
+            primary_message = f"Work item successfully transferred from '{old_workflow.name}' to '{destination_workflow.name}'"
+            messages.insert(0, primary_message)
+            
+            return {
+                'success': True,
+                'messages': messages,
+                'history_entry_id': history_entry.id,
+                'old_workflow': old_workflow.name,
+                'new_workflow': destination_workflow.name,
+                'old_step': old_step.name,
+                'new_step': destination_step.name
+            }
+            
+        except Exception as e:
+            # Rollback would happen automatically due to transaction
+            return {
+                'success': False,
+                'error': f"Transfer failed: {str(e)}",
+                'messages': messages
+            }
+    
+    def can_transfer_to_workflow(self, user_profile, destination_workflow=None):
+        """
+        Check if the user can transfer this work item to another workflow
+        
+        Args:
+            user_profile: UserProfile instance to check permissions for
+            destination_workflow: Optional specific workflow to check access to
+        
+        Returns:
+            dict: Permission check result with can_transfer boolean and reasons
+        """
+        # Basic permission checks
+        can_transfer = False
+        reasons = []
+        
+        # Check if user has transfer permissions
+        has_transfer_permission = (
+            user_profile.is_organization_admin or
+            user_profile.has_staff_panel_access or
+            (hasattr(user_profile, 'role') and 
+             user_profile.role and 
+             user_profile.role.permissions.filter(codename='workitem.transfer').exists())
+        )
+        
+        if not has_transfer_permission:
+            reasons.append("User does not have work item transfer permissions")
+        
+        # Check if user has access to current workflow
+        has_current_workflow_access = (
+            user_profile.is_organization_admin or
+            self.workflow.owner_team in user_profile.teams.all() or
+            self.created_by == user_profile or
+            self.current_assignee == user_profile
+        )
+        
+        if not has_current_workflow_access:
+            reasons.append("User does not have access to current workflow")
+        
+        # Check destination workflow access if specified
+        if destination_workflow:
+            has_destination_access = (
+                user_profile.is_organization_admin or
+                destination_workflow.owner_team in user_profile.teams.all()
+            )
+            
+            if not has_destination_access:
+                reasons.append(f"User does not have access to destination workflow '{destination_workflow.name}'")
+        
+        # Check if work item is in a state that allows transfer
+        if self.is_completed:
+            reasons.append("Cannot transfer completed work items")
+        
+        can_transfer = has_transfer_permission and has_current_workflow_access and not self.is_completed
+        
+        if destination_workflow:
+            can_transfer = can_transfer and (
+                user_profile.is_organization_admin or
+                destination_workflow.owner_team in user_profile.teams.all()
+            )
+        
+        return {
+            'can_transfer': can_transfer,
+            'reasons': reasons,
+            'has_permission': has_transfer_permission,
+            'has_current_access': has_current_workflow_access,
+            'can_access_destination': destination_workflow is None or (
+                user_profile.is_organization_admin or
+                destination_workflow.owner_team in user_profile.teams.all()
+            )
+        }
 
     def save(self, *args, **kwargs):
         # Mark as completed if in terminal step

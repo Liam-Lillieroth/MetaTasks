@@ -441,6 +441,7 @@ def create_work_item(request, workflow_id):
             work_item = form.save(commit=False)
             work_item.workflow = workflow
             work_item.current_step = first_step
+            work_item.current_step_entered_at = timezone.now()
             work_item.created_by = profile
             work_item.save()
             
@@ -691,7 +692,8 @@ def work_item_detail(request, work_item_id):
         'comment_form': comment_form,
         'comments': comments,
         'history': history,
-    'booking_status': booking_status,
+        'booking_status': booking_status,
+        'transfer_check': work_item.can_transfer_to_workflow(profile),
     }
     
     return render(request, 'cflows/work_item_detail.html', context)
@@ -1914,3 +1916,145 @@ def select_workflow_for_bulk_transitions(request):
     }
     
     return render(request, 'cflows/select_workflow_for_action.html', context)
+
+
+@login_required
+@require_organization_access
+def transfer_work_item(request, uuid):
+    """Transfer a work item to a different workflow"""
+    profile = get_user_profile(request)
+    if not profile:
+        messages.error(request, "Profile not found")
+        return redirect('cflows:index')
+    
+    work_item = get_object_or_404(WorkItem, uuid=uuid, workflow__organization=profile.organization)
+    
+    # Check if user can transfer this work item
+    transfer_check = work_item.can_transfer_to_workflow(profile)
+    if not transfer_check['can_transfer']:
+        messages.error(request, f"You cannot transfer this work item: {'; '.join(transfer_check['reasons'])}")
+        return redirect('cflows:work_item_detail', work_item_id=work_item.id)
+    
+    # Get available destination workflows (exclude current workflow)
+    available_workflows = Workflow.objects.filter(
+        organization=profile.organization,
+        is_active=True
+    ).exclude(id=work_item.workflow.id).select_related('owner_team')
+    
+    # Filter workflows user has access to
+    if not profile.is_organization_admin:
+        available_workflows = available_workflows.filter(
+            owner_team__in=profile.teams.all()
+        )
+    
+    if request.method == 'POST':
+        destination_workflow_id = request.POST.get('destination_workflow')
+        destination_step_id = request.POST.get('destination_step')
+        transfer_notes = request.POST.get('transfer_notes', '').strip()
+        preserve_assignee = request.POST.get('preserve_assignee') == 'on'
+        
+        if not destination_workflow_id or not destination_step_id:
+            messages.error(request, "Please select both destination workflow and step")
+            return redirect('cflows:transfer_work_item', uuid=uuid)
+        
+        try:
+            destination_workflow = Workflow.objects.get(
+                id=destination_workflow_id,
+                organization=profile.organization,
+                is_active=True
+            )
+            destination_step = WorkflowStep.objects.get(
+                id=destination_step_id,
+                workflow=destination_workflow
+            )
+            
+            # Final permission check for destination workflow
+            dest_check = work_item.can_transfer_to_workflow(profile, destination_workflow)
+            if not dest_check['can_transfer']:
+                messages.error(request, f"Cannot transfer to selected workflow: {'; '.join(dest_check['reasons'])}")
+                return redirect('cflows:transfer_work_item', uuid=uuid)
+            
+            # Perform the transfer
+            with transaction.atomic():
+                result = work_item.transfer_to_workflow(
+                    destination_workflow=destination_workflow,
+                    destination_step=destination_step,
+                    transferred_by=profile,
+                    notes=transfer_notes,
+                    preserve_assignee=preserve_assignee
+                )
+            
+            if result['success']:
+                for message in result['messages']:
+                    messages.success(request, message)
+                return redirect('cflows:work_item_detail', work_item_id=work_item.id)
+            else:
+                messages.error(request, result.get('error', 'Transfer failed'))
+                
+        except (Workflow.DoesNotExist, WorkflowStep.DoesNotExist):
+            messages.error(request, "Invalid destination workflow or step")
+        except Exception as e:
+            messages.error(request, f"Transfer failed: {str(e)}")
+        
+        return redirect('cflows:transfer_work_item', uuid=uuid)
+    
+    # GET request - show transfer form
+    context = {
+        'profile': profile,
+        'organization': profile.organization,
+        'work_item': work_item,
+        'available_workflows': available_workflows,
+        'transfer_check': transfer_check,
+        'page_title': f'Transfer Work Item: {work_item.title}',
+    }
+    
+    return render(request, 'cflows/transfer_work_item.html', context)
+
+
+@login_required
+@require_organization_access
+def get_workflow_steps_api(request, workflow_id):
+    """API endpoint to get steps for a specific workflow (for transfer form)"""
+    profile = get_user_profile(request)
+    if not profile:
+        return JsonResponse({'error': 'Profile not found'}, status=400)
+    
+    try:
+        workflow = Workflow.objects.get(
+            id=workflow_id,
+            organization=profile.organization
+        )
+        
+        # Check if user has access to this workflow
+        if not profile.is_organization_admin and workflow.owner_team not in profile.teams.all():
+            return JsonResponse({'error': 'No access to this workflow'}, status=403)
+        
+        steps = workflow.steps.order_by('order').values(
+            'id', 'name', 'description', 'is_terminal', 'requires_booking'
+        )
+        
+        return JsonResponse({'steps': list(steps)})
+        
+    except Workflow.DoesNotExist:
+        return JsonResponse({'error': 'Workflow not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def debug_user_info(request):
+    """Debug API endpoint to check user authentication and organization"""
+    profile = get_user_profile(request)
+    
+    return JsonResponse({
+        'user': request.user.username if request.user.is_authenticated else 'Anonymous',
+        'user_id': request.user.id if request.user.is_authenticated else None,
+        'profile': str(profile) if profile else None,
+        'organization': profile.organization.name if profile and profile.organization else None,
+        'organization_id': profile.organization.id if profile and profile.organization else None,
+        'is_org_admin': profile.is_organization_admin if profile else False,
+        'teams': [str(team) for team in profile.teams.all()] if profile else [],
+        'session_key': request.session.session_key,
+        'headers': dict(request.headers),
+    })
+

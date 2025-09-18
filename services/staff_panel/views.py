@@ -11,7 +11,7 @@ from django.db.models import Count, Q, Avg
 from django.utils import timezone
 from django.contrib.auth.models import User
 from core.models import Organization, UserProfile, Team, AuditLog, SystemConfiguration
-from core.permissions import Role, Permission, UserRoleAssignment
+from core.permissions import Role, Permission, UserRoleAssignment, RolePermission
 from core.views import require_organization_access
 from core.decorators import require_permission
 from licensing.models import Service, License, CustomLicense, UserLicenseAssignment, LicenseAuditLog, LicenseType

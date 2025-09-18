@@ -10,6 +10,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
+from django.utils import timezone
 from django.db import transaction
 from django.urls import reverse
 from core.models import Organization, UserProfile, Team
@@ -102,6 +103,7 @@ def transition_work_item(request, work_item_id, transition_id):
             
             # Update work item
             work_item.current_step = transition.to_step
+            work_item.current_step_entered_at = timezone.now()
             
             # If transition requires assignment and no assignee, try to auto-assign
             if transition.to_step.assigned_team and not work_item.current_assignee:
@@ -444,6 +446,7 @@ def backward_transition_form(request, work_item_id, step_id):
                     
                     # Update work item
                     work_item.current_step = target_step
+                    work_item.current_step_entered_at = timezone.now()
                     
                     # Reset completion status if moving back from terminal step
                     if work_item.is_completed:
@@ -566,15 +569,14 @@ def move_work_item_back(request, work_item_id, step_id):
             
             # Update work item
             work_item.current_step = target_step
+            work_item.current_step_entered_at = timezone.now()
             
             # Reset completion status if moving back from terminal step
             if work_item.is_completed:
                 work_item.is_completed = False
                 work_item.completed_at = None
             
-            work_item.save()
-            
-            # Create history entry
+            work_item.save()            # Create history entry
             WorkItemHistory.objects.create(
                 work_item=work_item,
                 from_step=from_step,

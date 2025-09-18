@@ -1,0 +1,459 @@
+{% extends 'cflows/base.html' %}
+
+{% block title %}Transfer Work Item - {{ work_item.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .transfer-warning {
+        background: linear-gradient(45deg, #fbbf24, #f59e0b);
+        color: white;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 20px;
+    }
+    
+    .workflow-card {
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .workflow-card:hover {
+        border-color: #3b82f6;
+        background-color: #f8fafc;
+    }
+    
+    .workflow-card.selected {
+        border-color: #3b82f6;
+        background-color: #eff6ff;
+    }
+    
+    .step-option {
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .step-option:hover {
+        border-color: #3b82f6;
+        background-color: #f8fafc;
+    }
+    
+    .step-option.selected {
+        border-color: #3b82f6;
+        background-color: #eff6ff;
+    }
+    
+    .booking-info {
+        background-color: #fef3c7;
+        border: 1px solid #fbbf24;
+        border-radius: 6px;
+        padding: 12px;
+        margin-top: 16px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="mb-6">
+            <nav class="flex mb-4" aria-label="Breadcrumb">
+                <ol class="flex items-center space-x-4">
+                    <li>
+                        <a href="{% url 'cflows:index' %}" class="text-gray-400 hover:text-gray-500">
+                            <i class="fas fa-home"></i>
+                        </a>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+                            <a href="{% url 'cflows:work_items_list' %}" class="text-sm font-medium text-gray-500 hover:text-gray-700">
+                                Work Items
+                            </a>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+                            <a href="{% url 'cflows:work_item_detail' work_item.id %}" class="text-sm font-medium text-gray-500 hover:text-gray-700">
+                                {{ work_item.title }}
+                            </a>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+                            <span class="text-sm font-medium text-gray-500">Transfer</span>
+                        </div>
+                    </li>
+                </ol>
+            </nav>
+            
+            <h1 class="text-3xl font-bold text-gray-900">
+                <i class="fas fa-exchange-alt text-blue-600 mr-3"></i>
+                Transfer Work Item
+            </h1>
+            <p class="text-gray-600 mt-2">Move this work item to a different workflow</p>
+        </div>
+
+        <!-- Warning Box -->
+        <div class="transfer-warning">
+            <div class="flex items-start">
+                <i class="fas fa-exclamation-triangle text-2xl mr-3 mt-1"></i>
+                <div>
+                    <h3 class="font-semibold text-lg mb-2">Important: Work Item Transfer</h3>
+                    <ul class="space-y-1 text-sm">
+                        <li>• This action will move the work item to a different workflow and team</li>
+                        <li>• All history, comments, and attachments will be preserved</li>
+                        <li>• Associated bookings will be updated to reflect the new workflow</li>
+                        <li>• The assignee may be cleared if they don't have access to the destination workflow</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Work Item Info -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+            <div class="p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Current Work Item</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Title</label>
+                        <p class="text-gray-900 font-medium">{{ work_item.title }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Current Workflow</label>
+                        <p class="text-gray-900">{{ work_item.workflow.name }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Current Step</label>
+                        <p class="text-gray-900">{{ work_item.current_step.name }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Priority</label>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            {% if work_item.priority == 'critical' %}bg-red-100 text-red-800
+                            {% elif work_item.priority == 'high' %}bg-orange-100 text-orange-800
+                            {% elif work_item.priority == 'normal' %}bg-blue-100 text-blue-800
+                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {{ work_item.get_priority_display }}
+                        </span>
+                    </div>
+                </div>
+                
+                {% if work_item.current_assignee %}
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-700">Current Assignee</label>
+                    <p class="text-gray-900">{{ work_item.current_assignee.user.get_full_name|default:work_item.current_assignee.user.username }}</p>
+                </div>
+                {% endif %}
+                
+                <!-- Booking Information -->
+                {% with booking_summary=work_item.get_all_bookings_summary %}
+                {% if booking_summary.has_bookings %}
+                <div class="booking-info">
+                    <h4 class="font-medium text-gray-900 mb-2">
+                        <i class="fas fa-calendar-check mr-2"></i>
+                        Associated Bookings
+                    </h4>
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        {% if booking_summary.cflows_bookings.total > 0 %}
+                        <div>
+                            <span class="font-medium">CFlows Bookings:</span>
+                            {{ booking_summary.cflows_bookings.total }} total
+                            ({{ booking_summary.cflows_bookings.completed }} completed)
+                        </div>
+                        {% endif %}
+                        {% if booking_summary.scheduling_bookings.total > 0 %}
+                        <div>
+                            <span class="font-medium">Scheduling Bookings:</span>
+                            {{ booking_summary.scheduling_bookings.total }} total
+                            ({{ booking_summary.scheduling_bookings.completed }} completed)
+                        </div>
+                        {% endif %}
+                    </div>
+                    <p class="text-xs text-gray-600 mt-2">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        All bookings will be updated to reflect the new workflow
+                    </p>
+                </div>
+                {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+
+        <!-- Transfer Form -->
+        <form method="post" id="transferForm">
+            {% csrf_token %}
+            
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div class="p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-4">Select Destination</h2>
+                    
+                    <!-- Workflow Selection -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-3">
+                            Destination Workflow *
+                        </label>
+                        {% if available_workflows %}
+                            <div class="space-y-2">
+                                {% for workflow in available_workflows %}
+                                <div class="workflow-card" data-workflow-id="{{ workflow.id }}">
+                                    <div class="flex items-center">
+                                        <input type="radio" 
+                                               name="destination_workflow" 
+                                               value="{{ workflow.id }}" 
+                                               id="workflow_{{ workflow.id }}"
+                                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                               required>
+                                        <label for="workflow_{{ workflow.id }}" class="ml-3 flex-1 cursor-pointer">
+                                            <div class="flex items-center justify-between">
+                                                <div>
+                                                    <p class="text-sm font-medium text-gray-900">{{ workflow.name }}</p>
+                                                    <p class="text-sm text-gray-500">{{ workflow.description|default:"No description" }}</p>
+                                                    <p class="text-xs text-gray-400 mt-1">
+                                                        <i class="fas fa-users mr-1"></i>
+                                                        Team: {{ workflow.owner_team.name }}
+                                                    </p>
+                                                </div>
+                                                <div class="text-xs text-gray-500">
+                                                    {{ workflow.steps.count }} steps
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="text-center py-8 text-gray-500">
+                                <i class="fas fa-exclamation-circle text-4xl mb-4"></i>
+                                <p>No available workflows found.</p>
+                                <p class="text-sm">You need access to at least one other workflow to transfer this work item.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Step Selection (will be populated via JavaScript) -->
+                    <div class="mb-6" id="stepSelection" style="display: none;">
+                        <label class="block text-sm font-medium text-gray-700 mb-3">
+                            Destination Step *
+                        </label>
+                        <div id="stepOptions" class="space-y-2">
+                            <!-- Steps will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Transfer Notes -->
+                    <div class="mb-6">
+                        <label for="transfer_notes" class="block text-sm font-medium text-gray-700 mb-2">
+                            Transfer Notes
+                        </label>
+                        <textarea name="transfer_notes" 
+                                  id="transfer_notes"
+                                  rows="4" 
+                                  class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Explain why this work item is being transferred (optional)..."></textarea>
+                        <p class="text-xs text-gray-500 mt-1">These notes will be visible in the work item history and comments.</p>
+                    </div>
+                    
+                    <!-- Preserve Assignee Option -->
+                    {% if work_item.current_assignee %}
+                    <div class="mb-6">
+                        <div class="flex items-center">
+                            <input type="checkbox" 
+                                   name="preserve_assignee" 
+                                   id="preserve_assignee"
+                                   class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                            <label for="preserve_assignee" class="ml-2 text-sm text-gray-700">
+                                Try to preserve current assignee ({{ work_item.current_assignee.user.get_full_name|default:work_item.current_assignee.user.username }})
+                            </label>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            The assignee will be cleared if they don't have access to the destination workflow.
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Form Actions -->
+                <div class="bg-gray-50 px-6 py-4 flex justify-between items-center rounded-b-lg">
+                    <a href="{% url 'cflows:work_item_detail' work_item.id %}" 
+                       class="text-gray-600 hover:text-gray-800 font-medium">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Cancel Transfer
+                    </a>
+                    
+                    <button type="submit" 
+                            id="transferButton"
+                            class="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled>
+                        <i class="fas fa-exchange-alt mr-2"></i>
+                        Transfer Work Item
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Transfer form DOM loaded');
+    const workflowRadios = document.querySelectorAll('input[name="destination_workflow"]');
+    const stepSelection = document.getElementById('stepSelection');
+    const stepOptions = document.getElementById('stepOptions');
+    const transferButton = document.getElementById('transferButton');
+    
+    console.log('Found elements:', {
+        workflowRadios: workflowRadios.length,
+        stepSelection: !!stepSelection,
+        stepOptions: !!stepOptions,
+        transferButton: !!transferButton
+    });
+    
+    // Handle workflow selection
+    workflowRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            console.log('Workflow radio changed:', this.value, this.checked);
+            if (this.checked) {
+                // Update visual selection
+                document.querySelectorAll('.workflow-card').forEach(card => {
+                    card.classList.remove('selected');
+                });
+                this.closest('.workflow-card').classList.add('selected');
+                
+                // Load steps for selected workflow
+                loadWorkflowSteps(this.value);
+            }
+        });
+    });
+    
+    function loadWorkflowSteps(workflowId) {
+        console.log('Loading steps for workflow:', workflowId);
+        stepSelection.style.display = 'none';
+        stepOptions.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading steps...</div>';
+        transferButton.disabled = true;
+        
+        // Get CSRF token
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        
+        fetch(`/services/cflows/api/workflows/${workflowId}/steps/`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json',
+            },
+            credentials: 'same-origin'
+        })
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Steps data received:', data);
+                if (data.steps && data.steps.length > 0) {
+                    renderSteps(data.steps);
+                    stepSelection.style.display = 'block';
+                } else {
+                    console.log('No steps found in response');
+                    stepOptions.innerHTML = '<div class="text-center py-4 text-gray-500">No steps found in this workflow.</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading steps:', error);
+                stepOptions.innerHTML = `<div class="text-center py-4 text-red-500">Error loading steps: ${error.message}<br>Check browser console for details.</div>`;
+            });
+    }
+    
+    function renderSteps(steps) {
+        console.log('Rendering steps:', steps);
+        stepOptions.innerHTML = '';
+        
+        steps.forEach((step, index) => {
+            console.log(`Creating step ${index}:`, step);
+            const stepDiv = document.createElement('div');
+            stepDiv.className = 'step-option';
+            stepDiv.innerHTML = `
+                <div class="flex items-center">
+                    <input type="radio" 
+                           name="destination_step" 
+                           value="${step.id}" 
+                           id="step_${step.id}"
+                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                           required>
+                    <label for="step_${step.id}" class="ml-3 flex-1 cursor-pointer">
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">
+                                ${step.name}
+                                ${step.is_terminal ? '<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Final</span>' : ''}
+                                ${step.requires_booking ? '<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Booking Required</span>' : ''}
+                            </p>
+                            ${step.description ? `<p class="text-sm text-gray-500">${step.description}</p>` : ''}
+                        </div>
+                    </label>
+                </div>
+            `;
+            
+            const radio = stepDiv.querySelector('input[name="destination_step"]');
+            radio.addEventListener('change', function() {
+                if (this.checked) {
+                    console.log('Step selected:', step.name);
+                    // Update visual selection
+                    document.querySelectorAll('.step-option').forEach(option => {
+                        option.classList.remove('selected');
+                    });
+                    stepDiv.classList.add('selected');
+                    
+                    // Enable transfer button
+                    transferButton.disabled = false;
+                    console.log('Transfer button enabled');
+                }
+            });
+            
+            stepOptions.appendChild(stepDiv);
+            
+            // Auto-select first step
+            if (index === 0) {
+                console.log('Auto-selecting first step:', step.name);
+                radio.checked = true;
+                stepDiv.classList.add('selected');
+                transferButton.disabled = false;
+            }
+        });
+    }
+    
+    // Handle form submission
+    document.getElementById('transferForm').addEventListener('submit', function(e) {
+        const workflowSelected = document.querySelector('input[name="destination_workflow"]:checked');
+        const stepSelected = document.querySelector('input[name="destination_step"]:checked');
+        
+        if (!workflowSelected || !stepSelected) {
+            e.preventDefault();
+            alert('Please select both a destination workflow and step.');
+            return;
+        }
+        
+        // Show confirmation
+        const workflowName = workflowSelected.closest('.workflow-card').querySelector('.text-gray-900').textContent;
+        const stepName = stepSelected.closest('.step-option').querySelector('.text-gray-900').textContent.trim();
+        
+        if (!confirm(`Are you sure you want to transfer this work item to "${workflowName}" at step "${stepName}"?\n\nThis action cannot be undone.`)) {
+            e.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}

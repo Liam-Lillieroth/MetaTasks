@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.db.models import Count
 from django.utils.html import format_html
 from .models import Organization, UserProfile, Team, JobType, CalendarEvent
+from .permissions import Permission, Role, RolePermission, UserRoleAssignment
 
 
 @admin.register(Organization)
@@ -91,3 +92,49 @@ class CalendarEventAdmin(admin.ModelAdmin):
             obj.color
         )
     color_preview.short_description = 'Color'
+
+
+@admin.register(Permission)
+class PermissionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'codename', 'category', 'service', 'is_global', 'requires_resource']
+    list_filter = ['category', 'service', 'is_global', 'requires_resource']
+    search_fields = ['name', 'codename', 'description']
+    readonly_fields = ['created_at']
+
+
+class RolePermissionInline(admin.TabularInline):
+    model = RolePermission
+    extra = 0
+    raw_id_fields = ['permission', 'granted_by']
+
+
+@admin.register(Role)
+class RoleAdmin(admin.ModelAdmin):
+    list_display = ['name', 'organization', 'role_type', 'is_active', 'is_default', 'user_count']
+    list_filter = ['organization', 'role_type', 'is_active', 'is_default']
+    search_fields = ['name', 'description']
+    raw_id_fields = ['organization', 'created_by', 'inherits_from']
+    readonly_fields = ['created_at', 'updated_at']
+    inlines = [RolePermissionInline]
+    
+    def user_count(self, obj):
+        return obj.get_user_count()
+    user_count.short_description = 'Users'
+
+
+@admin.register(RolePermission)
+class RolePermissionAdmin(admin.ModelAdmin):
+    list_display = ['role', 'permission', 'resource_type', 'granted_by', 'granted_at']
+    list_filter = ['role__organization', 'permission__category', 'granted_at']
+    search_fields = ['role__name', 'permission__name']
+    raw_id_fields = ['role', 'permission', 'granted_by']
+    readonly_fields = ['granted_at']
+
+
+@admin.register(UserRoleAssignment)
+class UserRoleAssignmentAdmin(admin.ModelAdmin):
+    list_display = ['user_profile', 'role', 'is_active', 'valid_from', 'valid_until', 'assigned_at']
+    list_filter = ['role__organization', 'is_active', 'assigned_at']
+    search_fields = ['user_profile__user__username', 'role__name']
+    raw_id_fields = ['user_profile', 'role', 'assigned_by']
+    readonly_fields = ['assigned_at']

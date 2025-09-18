@@ -151,6 +151,14 @@
                                             <span>{{ item.workflow.name }}</span>
                                             <span>•</span>
                                             <span>{{ item.current_step.name }}</span>
+                                            <span>•</span>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                                       {% if item.days_on_current_step >= 7 %}bg-red-100 text-red-800
+                                                       {% elif item.days_on_current_step >= 3 %}bg-yellow-100 text-yellow-800
+                                                       {% else %}bg-green-100 text-green-800{% endif %}">
+                                                <i class="fas fa-clock mr-1"></i>
+                                                {{ item.current_step_duration_display }}
+                                            </span>
                                             {% if item.current_assignee %}
                                                 <span>•</span>
                                                 <span>{% if item.current_assignee.user %}{{ item.current_assignee.user.get_full_name|default:item.current_assignee.user.username }}{% else %}Unknown User{% endif %}</span>
