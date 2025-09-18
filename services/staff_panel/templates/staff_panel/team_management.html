@@ -58,7 +58,9 @@
                                     <button type="button" class="edit-team-card-btn block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                                             data-team-id="{{ team.id }}" 
                                             data-team-name="{{ team.name }}" 
-                                            data-team-description="{{ team.description|default:'' }}">
+                                            data-team-description="{{ team.description|default:'' }}"
+                                            data-parent-team-id="{{ team.parent_team.id|default:'' }}"
+                                            data-manager-id="{{ team.manager.id|default:'' }}">
                                         <i class="fas fa-edit mr-2"></i>Edit Team
                                     </button>
                                     <button type="button" class="manage-team-card-btn block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -214,7 +216,9 @@
                                         <button type="button" class="edit-team-btn text-indigo-600 hover:text-indigo-900" 
                                                 data-team-id="{{ team.id }}" 
                                                 data-team-name="{{ team.name }}" 
-                                                data-team-description="{{ team.description|default:'' }}">Edit</button>
+                                                data-team-description="{{ team.description|default:'' }}"
+                                                data-parent-team-id="{{ team.parent_team.id|default:'' }}"
+                                                data-manager-id="{{ team.manager.id|default:'' }}">Edit</button>
                                     {% endif %}
                                     {% if profile|has_permission:'team.manage_members' %}
                                         <button type="button" class="manage-team-btn text-gray-600 hover:text-gray-900" 
@@ -276,8 +280,13 @@
                     <select id="parentTeam" name="parent_team" 
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                         <option value="">Select parent team (for sub-teams)</option>
-                        {% for team in top_level_teams %}
-                            <option value="{{ team.id }}">{{ team.name }}</option>
+                        {% for team in teams %}
+                            {% if not team.parent_team %}
+                                <option value="{{ team.id }}">{{ team.name }}</option>
+                                {% for sub_team in team.sub_teams.all %}
+                                    <option value="{{ sub_team.id }}">{{ team.name }} > {{ sub_team.name }}</option>
+                                {% endfor %}
+                            {% endif %}
                         {% endfor %}
                     </select>
                     <p class="text-xs text-gray-500 mt-1">Leave empty to create a top-level team, or select a parent to create a sub-team.</p>
@@ -336,10 +345,16 @@
                     <select id="editParentTeam" name="parent_team" 
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                         <option value="">No parent team (top-level)</option>
-                        {% for team in top_level_teams %}
-                            <option value="{{ team.id }}">{{ team.name }}</option>
+                        {% for team in teams %}
+                            {% if not team.parent_team %}
+                                <option value="{{ team.id }}" class="edit-parent-option">{{ team.name }}</option>
+                                {% for sub_team in team.sub_teams.all %}
+                                    <option value="{{ sub_team.id }}" class="edit-parent-option">{{ team.name }} > {{ sub_team.name }}</option>
+                                {% endfor %}
+                            {% endif %}
                         {% endfor %}
                     </select>
+                    <p class="text-xs text-gray-500 mt-1">Teams cannot be their own parent or descendant.</p>
                 </div>
                 <div class="mb-4">
                     <label for="editTeamManager" class="block text-sm font-medium text-gray-700 mb-2">Team Manager (Optional)</label>
@@ -472,11 +487,24 @@ document.addEventListener('DOMContentLoaded', function() {
             const teamId = this.dataset.teamId;
             const teamName = this.dataset.teamName;
             const teamDescription = this.dataset.teamDescription;
+            const parentTeamId = this.dataset.parentTeamId;
+            const managerId = this.dataset.managerId;
             
             document.getElementById('editTeamId').value = teamId;
             document.getElementById('editTeamName').value = teamName;
             document.getElementById('editTeamDescription').value = teamDescription || '';
             document.getElementById('editTeamForm').action = `{% url 'staff_panel:team_management' %}`;
+            
+            // Set parent team selection
+            const parentSelect = document.getElementById('editParentTeam');
+            parentSelect.value = parentTeamId || '';
+            
+            // Set manager selection  
+            const managerSelect = document.getElementById('editTeamManager');
+            managerSelect.value = managerId || '';
+            
+            // Disable options that would create circular references
+            updateParentTeamOptions(teamId);
             
             openModal('editTeamModal');
         });
@@ -488,11 +516,24 @@ document.addEventListener('DOMContentLoaded', function() {
             const teamId = this.dataset.teamId;
             const teamName = this.dataset.teamName;
             const teamDescription = this.dataset.teamDescription;
+            const parentTeamId = this.dataset.parentTeamId;
+            const managerId = this.dataset.managerId;
             
             document.getElementById('editTeamId').value = teamId;
             document.getElementById('editTeamName').value = teamName;
             document.getElementById('editTeamDescription').value = teamDescription || '';
             document.getElementById('editTeamForm').action = `{% url 'staff_panel:team_management' %}`;
+            
+            // Set parent team selection
+            const parentSelect = document.getElementById('editParentTeam');
+            parentSelect.value = parentTeamId || '';
+            
+            // Set manager selection  
+            const managerSelect = document.getElementById('editTeamManager');
+            managerSelect.value = managerId || '';
+            
+            // Disable options that would create circular references
+            updateParentTeamOptions(teamId);
             
             // Close dropdown
             document.getElementById(`team${teamId}-dropdown`).classList.add('hidden');
@@ -801,6 +842,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+function updateParentTeamOptions(editingTeamId) {
+    const parentSelect = document.getElementById('editParentTeam');
+    const options = parentSelect.querySelectorAll('.edit-parent-option');
+    
+    options.forEach(option => {
+        // Disable the team being edited (can't be its own parent)
+        if (option.value === editingTeamId) {
+            option.disabled = true;
+            option.textContent = option.textContent + ' (Cannot be own parent)';
+        } else {
+            option.disabled = false;
+            // Reset text in case it was modified before
+            option.textContent = option.textContent.replace(' (Cannot be own parent)', '');
+        }
+    });
+}
 
 // Team card dropdown functions
 function toggleTeamDropdown(teamId) {

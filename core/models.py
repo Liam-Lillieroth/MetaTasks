@@ -517,13 +517,22 @@ class Team(models.Model):
     created_by = models.ForeignKey(UserProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_teams')
     
     class Meta:
-        unique_together = ['organization', 'name']
+        # Allow same team names under different parent teams
+        unique_together = [['organization', 'name', 'parent_team']]
         ordering = ['name']
         indexes = [
             models.Index(fields=['organization', 'is_active']),
+            models.Index(fields=['parent_team']),
         ]
     
     def __str__(self):
+        if self.parent_team:
+            return f"{self.parent_team.name} > {self.name}"
+        return f"{self.name}"
+    
+    @property
+    def unique_display_name(self):
+        """Get a unique display name including organization context"""
         if self.parent_team:
             return f"{self.parent_team.name} > {self.name} ({self.organization.name})"
         return f"{self.name} ({self.organization.name})"
