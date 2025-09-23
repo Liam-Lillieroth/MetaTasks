@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/STAFF_PANEL_COMPLETION_SUMMARY.md` and summarized in `docs/services/staff_panel.md`.
 # Staff Panel Service - Complete Implementation Summary
 
 ## 🎯 Project Overview

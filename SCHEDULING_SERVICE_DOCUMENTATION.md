@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/SCHEDULING_SERVICE_DOCUMENTATION.md` and summarized in `docs/services/scheduling.md`.
 # Scheduling Service Documentation
 
 ## Overview
@@ -51,131 +52,9 @@ This is essential to understand when writing queries, creating migrations, or bu
 
 ### SchedulableResource
 **Purpose**: Represents any bookable resource in the system
-
-**Key Fields**:
-- `name` (CharField): Resource name
-- `resource_type` (CharField): Type of resource (room, equipment, vehicle, team, other)
-- `description` (TextField): Detailed description
-- `capacity` (PositiveIntegerField): Maximum capacity/occupancy
-- `location` (CharField): Physical location
-- `organization` (ForeignKey): Links to core.Organization model
-- `linked_team` (ForeignKey): Optional link to existing Team
-- `is_active` (BooleanField): Availability status
-- `metadata` (JSONField): Flexible additional properties
-
-**Relationships**:
-- Belongs to a core.Organization (many-to-one)
-- Can link to existing Team (one-to-one optional)
-- Has many BookingRequests (one-to-many)
-- Has many ResourceScheduleRules (one-to-many)
-
-### BookingRequest
-**Purpose**: Manages booking requests with approval workflow
-
-**Key Fields**:
-- `title` (CharField): Booking title/purpose
-- `description` (TextField): Detailed description
-- `resource` (ForeignKey): Target resource
-- `requested_by` (ForeignKey): UserProfile who made request
-- `requested_start` (DateTimeField): Start time
-- `requested_end` (DateTimeField): End time
-- `status` (CharField): Current status with choices:
-  - `pending`: Awaiting approval
-  - `confirmed`: Approved and scheduled
-  - `in_progress`: Currently active
-  - `completed`: Finished
-  - `cancelled`: Cancelled
-- `notes` (TextField): Additional notes
-- `organization` (ForeignKey): Organization context (links to core.Organization)
-- `metadata` (JSONField): Flexible additional data
-
-**Methods**:
-- `duration()`: Returns booking duration
-- `is_upcoming()`: Checks if booking is in next 24 hours
-- `can_be_cancelled()`: Business logic for cancellation
-
-### ResourceScheduleRule
-**Purpose**: Defines availability rules for resources
-
-**Key Fields**:
-- `resource` (ForeignKey): Target resource
-- `rule_type` (CharField): Type of rule (availability, blackout, maintenance)
-- `day_of_week` (IntegerField): Day restriction (0=Monday, 6=Sunday)
-- `start_time` (TimeField): Start time for rule
-- `end_time` (TimeField): End time for rule
-- `start_date` (DateField): Rule effective start date
-- `end_date` (DateField): Rule expiration date
-- `is_active` (BooleanField): Rule status
-
-## Business Logic Layer
-
-### SchedulingService
-**Location**: `services/scheduling/services.py`
-
-**Core Methods**:
-- `check_availability(resource, start_time, end_time)`: Validates time slot availability
-- `create_booking(user_profile, resource, start_time, end_time, **kwargs)`: Creates new booking
-- `approve_booking(booking_id, approver)`: Approves pending booking
-- `cancel_booking(booking_id, user)`: Cancels existing booking
-- `get_upcoming_bookings(organization, days=7)`: Retrieves upcoming bookings
-- `get_utilization_stats(resource, start_date, end_date)`: Calculates usage statistics
-
-### ResourceManagementService
-**Location**: `services/scheduling/services.py`
-
-**Core Methods**:
-- `create_resource(organization, name, resource_type, **kwargs)`: Creates new resource
-- `update_resource(resource_id, **kwargs)`: Updates resource properties
-- `deactivate_resource(resource_id)`: Safely deactivates resource
-- `get_available_resources(organization, datetime)`: Gets available resources at time
-- `calculate_capacity_utilization(resource, period)`: Analyzes capacity usage
-
-## Integration Layer
-
-### ServiceIntegration (Base Class)
-**Purpose**: Abstract base for service integrations
-
-**Methods**:
-- `sync_data()`: Abstract method for data synchronization
-- `handle_booking_created(booking)`: Hook for new bookings
-- `handle_booking_cancelled(booking)`: Hook for cancellations
-
-### CFlowsIntegration
-**Purpose**: Integrates with existing CFlows TeamBooking system
-
-**Implementation**:
-- Migrates TeamBooking records to BookingRequest
-- Creates SchedulableResource from Team records
-- Maintains backward compatibility
-- Factory function: `get_service_integration('cflows')`
-
-## Database Design
-
-### Migration History
-1. **0001_initial**: Core models creation
-2. **0002_migrate_team_bookings**: Data migration from CFlows
-3. **0003_add_schedule_rules**: Added scheduling rules functionality
-
-### Key Relationships
-```sql
-SchedulableResource
-├── organization_id (FK to core_organization)
-├── linked_team_id (FK to cflows_team, nullable)
-└── created_by_id (FK to accounts_userprofile)
-
-BookingRequest
-├── resource_id (FK to scheduling_schedulableresource)
-├── requested_by_id (FK to accounts_userprofile)
-├── organization_id (FK to core_organization)
-└── approved_by_id (FK to accounts_userprofile, nullable)
-
-ResourceScheduleRule
-├── resource_id (FK to scheduling_schedulableresource)
-└── created_by_id (FK to accounts_userprofile)
-```
-
-## Web Interface
-
+````markdown
+Contents moved to `docs/originals/SCHEDULING_SERVICE_DOCUMENTATION.md` and summarized in `docs/services/scheduling.md`.
+````
 ### Views Architecture
 **Location**: `services/scheduling/views.py`
 

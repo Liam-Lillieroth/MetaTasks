@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/STAFF_PANEL_MIGRATION_COMPLETE.md` and summarized in `docs/services/staff_panel.md`.
 # Staff Panel Service Migration - Implementation Complete
 
 ## Overview

@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/TRANSITION_CUSTOMIZATION_IMPLEMENTATION.md` and summarized in `docs/design/transitions.md`.
 # CFlows Transition Customization - Complete Implementation Guide
 
 ## ✅ TRANSITION CUSTOMIZATION SYSTEM IMPLEMENTED
@@ -203,75 +204,9 @@ The workflow transitions manager displays:
 - **Dynamic Filtering**: Transitions filtered based on user permissions
 - **Secure Defaults**: Safe default values for all permission settings
 
-### Template Tag Security
-- **Custom Template Tags**: Safe permission checking in templates
-- **Context-aware Filtering**: Permission checks include work item context
-- **Graceful Fallbacks**: Safe defaults when permission checks fail
-
-## 📊 MODEL METHODS & HELPERS
-
-### Enhanced WorkflowTransition Methods
-
-```python
-def get_button_class(self):
-    """Get CSS class for transition button based on color"""
-    
-def get_display_label(self):
-    """Get the display label for the transition button"""
-    
-def can_user_execute(self, user_profile, work_item=None):
-    """Check if a user can execute this transition"""
-    
-def _check_custom_conditions(self, user_profile, work_item):
-    """Check custom conditions from the condition JSON field"""
-```
-
-#### Method Features
-- **Dynamic CSS Classes**: Automatic color class generation
-- **Smart Labels**: Intelligent label fallback logic
-- **Permission Checking**: Comprehensive permission validation
-- **Custom Conditions**: Extensible JSON-based condition system
-
-## 🚀 MIGRATION & DATABASE
-
-### Migration Implementation
-- **Custom Migration**: Hand-crafted migration to add all fields safely
-- **Default Values**: Safe defaults for all new fields
-- **Backward Compatibility**: Existing transitions work seamlessly
-- **No Data Loss**: All existing transition data preserved
-
-### Database Performance
-- **Indexed Fields**: Key fields properly indexed for performance
-- **Efficient Queries**: Optimized queries for permission checking
-- **Minimal Overhead**: Lightweight additional fields
-
-## 📖 USAGE EXAMPLES
-
-### Creating a Complex Approval Transition
-
-```python
-transition = WorkflowTransition.objects.create(
-    from_step=review_step,
-    to_step=approved_step,
-    label="Approve Request",
-    description="Approve the request and move to final approval stage",
-    color="green",
-    icon="fas fa-check",
-    requires_confirmation=True,
-    confirmation_message="Are you sure you want to approve this request?",
-    requires_comment=True,
-    comment_prompt="Please provide approval notes",
-    permission_level="admin",
-    auto_assign_to_step_team=True,
-    order=1
-)
-```
-
-### Creating a Rejection Transition
-
-```python
-transition = WorkflowTransition.objects.create(
-    from_step=review_step,
+````markdown
+Contents moved to `docs/originals/TRANSITION_CUSTOMIZATION_IMPLEMENTATION.md` and summarized in `docs/design/transitions.md`.
+````
     to_step=rejected_step,
     label="Reject",
     description="Reject the request and return to submitter",

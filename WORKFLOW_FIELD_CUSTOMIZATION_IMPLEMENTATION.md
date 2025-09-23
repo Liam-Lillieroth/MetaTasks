@@ -1,16 +1,16 @@
+Contents moved to `docs/originals/WORKFLOW_FIELD_CUSTOMIZATION_IMPLEMENTATION.md` and summarized in `docs/design/fields.md`.
 # CFlows Field Customization - Implementation Guide
 
 ## ✅ WORKFLOW FIELD CUSTOMIZATION SYSTEM IMPLEMENTED
 
-The CFlows system now includes comprehensive field customization capabilities, allowing organization administrators to control which standard fields are shown, hidden, required, or replaced with custom fields on a per-workflow basis.
+Contents moved to `docs/originals/WORKFLOW_FIELD_CUSTOMIZATION_IMPLEMENTATION.md` and summarized in `docs/design/fields.md`.
 
 ## 🎯 NEW FIELD CUSTOMIZATION FEATURES
 
 ### **1. Standard Field Control**
-- **Show/Hide Fields**: Toggle visibility of standard work item fields
-- **Required Fields**: Mark fields as mandatory for data entry
-- **Custom Replacements**: Replace standard fields with organization-specific custom fields
-- **Per-Workflow Configuration**: Different workflows can have different field requirements
+````
+````markdown
+````
 
 ### **2. Configurable Standard Fields**
 - **Title**: Work item identifier (can be hidden or required)

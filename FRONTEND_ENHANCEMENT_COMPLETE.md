@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/FRONTEND_ENHANCEMENT_COMPLETE.md` and summarized in `docs/services/staff_panel.md`.
 # Staff Panel Frontend Enhancement Complete
 
 ## Overview

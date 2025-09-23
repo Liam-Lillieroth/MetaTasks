@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/REGISTRATION_FLOW_UPDATE.md` and summarized in `docs/guides/registration.md`.
 # ✅ MetaTask Registration Flow - UPDATED
 
 ## 🎯 New User Experience Flow

@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/WORKFLOW_TRANSITIONS_IMPLEMENTATION.md` and summarized in `docs/guides/transitions.md` and `docs/design/transitions.md`.
 # Workflow Transitions Management - Implementation Summary
 
 ## ✅ COMPLETED FEATURES

@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/NAVBAR_TRANSITIONS_IMPLEMENTATION.md` and summarized in `docs/guides/transitions.md`.
 # CFlows Navbar Transition Management - Implementation Summary
 
 ## ✅ COMPLETED ENHANCEMENT

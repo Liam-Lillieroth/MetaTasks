@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/STAFF_PANEL_REAL_DATA_FIX.md` and summarized in `docs/services/staff_panel.md`.
 # Staff Panel Role & Permissions - Real Data Fix
 
 ## 🐛 **Issue Identified**

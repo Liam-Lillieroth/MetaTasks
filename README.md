@@ -1,4 +1,35 @@
+# MetaTask
+
+Documentation and developer guides have moved to the `docs/` folder. See `docs/README.md` for a structured table of contents and migration notes.
+
+Quick start (developer):
+
+```bash
+# clone
+git clone <repo-url>
+cd MetaTasks
+
+# run with docker-compose
+docker-compose up -d
+
+# create sample data (inside web container)
+docker-compose exec web python manage.py migrate --noinput
+docker-compose exec web python manage.py createsuperuser --noinput || true
+docker-compose exec web python manage.py create_cflows_sample_data || true
+
+# open app
+echo "Visit http://localhost:8000"
+```
+
+Where the original long-form documentation is preserved:
+
+- `docs/originals/` — full original markdown files moved from the repository root
+- `docs/` — concise, organized documentation and guides
+
+If you'd like I can scaffold a MkDocs site (`mkdocs.yml`) using the `docs/` structure so the docs are browsable as a static site. Ask me to proceed and I'll add that next.
 # MetaTask Platform
+
+> Documentation has moved to the `docs/` folder — see `docs/README.md` for structured docs and guides.
 
 **Version:** 2.0  
 **Last Updated:** December 2024  

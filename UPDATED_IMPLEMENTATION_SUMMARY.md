@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/UPDATED_IMPLEMENTATION_SUMMARY.md` and summarized in `docs/implementation/implementation_summary.md`.
 # MetaTask Platform Implementation Summary
 
 ## Overview

@@ -1,3 +1,4 @@
+Contents moved to `docs/originals/SUB_TEAMS_IMPLEMENTATION.md` and summarized in `docs/services/staff_panel.md`.
 # Sub-Teams Implementation - Complete Documentation
 
 ## 📋 Overview
