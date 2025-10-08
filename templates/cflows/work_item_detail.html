@@ -700,7 +700,11 @@
 // Load booking status for this work item
 async function loadBookingStatus() {
     try {
-        const response = await fetch(`{% url 'cflows:work_item_bookings_status' work_item.id %}`);
+        const response = await fetch(`{% url 'cflows:work_item_bookings_status' work_item.id %}`, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
         const data = await response.json();
         // Determine if there are any incomplete bookings (CFlows or Scheduling)
         const hasIncomplete = (data.cflows_bookings || []).some(b => !b.is_completed)

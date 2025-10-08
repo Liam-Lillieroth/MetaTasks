@@ -375,6 +375,37 @@ class SchedulingService:
         
         booking.status = 'completed'
         booking.completed_at = timezone.now()
+        # `completed_by` may be a Django User or a UserProfile; resolve to UserProfile
+        try:
+            from core.models import UserProfile
+            # If a Django auth User is passed, try to get related UserProfile
+            if completed_by is not None and not isinstance(completed_by, UserProfile):
+                # Some callers may pass a Django User instance
+                user = getattr(completed_by, 'user', None) if hasattr(completed_by, 'user') else None
+                # If it's the auth User model instance, try to find profile via one-to-one
+                if user is None and hasattr(completed_by, 'pk'):
+                    # completed_by might already be the auth User model
+                    try:
+                        # Import here to avoid circular import at module import time
+                        from django.contrib.auth import get_user_model
+                        AuthUser = get_user_model()
+                        if isinstance(completed_by, AuthUser):
+                            user_obj = completed_by
+                            # Look up corresponding UserProfile
+                            completed_by = UserProfile.objects.filter(user=user_obj).first()
+                        else:
+                            # Fallback: leave completed_by unchanged
+                            pass
+                    except Exception:
+                        pass
+                else:
+                    # If passed object has `.user` reference (e.g., a profile wrapper), use it
+                    if user is not None:
+                        completed_by = user
+        except Exception:
+            # If resolving fails, proceed and let ORM validation catch any mismatch
+            pass
+
         booking.completed_by = completed_by
         booking.actual_end = timezone.now()
         
@@ -384,11 +415,11 @@ class SchedulingService:
 
         booking.save()
 
-        booking_status_changed.sent(sender=BookingRequest, booking=booking, event='completed')
-        
+        booking_status_changed.send(sender=BookingRequest, booking=booking, event='completed')
+
         # Notify source service
         self._notify_source_service(booking, 'completed')
-        
+
         return True
     
     def cancel_booking(self, booking: BookingRequest, reason: str = "") -> bool:

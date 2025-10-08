@@ -275,8 +275,8 @@ class CFlowsSchedulingIntegration:
             
             # Try to advance the work item workflow if this is the final booking
             work_item = team_booking.work_item
-            if work_item and work_item.workflow_step:
-                current_step = work_item.workflow_step
+            if work_item and work_item.current_step:
+                current_step = work_item.current_step
                 
                 # Check if all team bookings for this work item are complete
                 all_bookings = TeamBooking.objects.filter(work_item=work_item)

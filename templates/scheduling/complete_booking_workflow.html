@@ -204,10 +204,44 @@ document.addEventListener('DOMContentLoaded', function() {
             method: 'POST',
             body: formData,
             headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('=== RESPONSE DEBUG INFO ===');
+            console.log('Response status:', response.status);
+            console.log('Response status text:', response.statusText);
+            console.log('Response URL:', response.url);
+            console.log('Response headers:');
+            for (let [key, value] of response.headers.entries()) {
+                console.log(`  ${key}: ${value}`);
+            }
+            
+            if (!response.ok) {
+                console.error('Response not OK, getting text content...');
+                return response.text().then(text => {
+                    console.error('Error response body:', text);
+                    throw new Error(`HTTP error! status: ${response.status} - ${text.substring(0, 200)}`);
+                });
+            }
+            
+            const contentType = response.headers.get('content-type');
+            console.log('Content-Type:', contentType);
+            
+            if (contentType && contentType.includes('application/json')) {
+                console.log('✓ Content-Type indicates JSON, parsing...');
+                return response.json();
+            } else {
+                console.error('✗ Content-Type does not indicate JSON!');
+                // If it's not JSON, get the text to see what we actually received
+                return response.text().then(text => {
+                    console.error('Full response body:', text);
+                    console.error('Response body preview:', text.substring(0, 500));
+                    throw new Error('Server returned HTML instead of JSON - Content-Type: ' + contentType);
+                });
+            }
+        })
         .then(data => {
             if (data.success) {
                 // Show success message and redirect
@@ -230,11 +264,44 @@ function completeWithoutWorkflow() {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest'
             },
             body: 'completion_notes=' + encodeURIComponent(document.getElementById('completion_notes').value)
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('=== SIMPLE COMPLETION RESPONSE DEBUG ===');
+            console.log('Complete booking response status:', response.status);
+            console.log('Complete booking response status text:', response.statusText);
+            console.log('Complete booking response URL:', response.url);
+            console.log('Complete booking headers:');
+            for (let [key, value] of response.headers.entries()) {
+                console.log(`  ${key}: ${value}`);
+            }
+            
+            if (!response.ok) {
+                console.error('Simple completion response not OK, getting text...');
+                return response.text().then(text => {
+                    console.error('Simple completion error body:', text);
+                    throw new Error(`HTTP error! status: ${response.status} - ${text.substring(0, 200)}`);
+                });
+            }
+            
+            const contentType = response.headers.get('content-type');
+            console.log('Simple completion Content-Type:', contentType);
+            
+            if (contentType && contentType.includes('application/json')) {
+                console.log('✓ Simple completion Content-Type indicates JSON');
+                return response.json();
+            } else {
+                console.error('✗ Simple completion Content-Type does not indicate JSON!');
+                return response.text().then(text => {
+                    console.error('Simple completion full response:', text);
+                    console.error('Simple completion preview:', text.substring(0, 500));
+                    throw new Error('Simple completion returned HTML instead of JSON - Content-Type: ' + contentType);
+                });
+            }
+        })
         .then(data => {
             if (data.success) {
                 alert(data.message);

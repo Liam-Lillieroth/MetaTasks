@@ -302,7 +302,11 @@ function closeModal() {
 document.getElementById('confirmComplete').addEventListener('click', function() {
     if (currentBookingId) {
         // Check if there's a linked work item first
-        fetch(`/scheduling/booking/${currentBookingId}/complete_booking_workflow_prompt/`)
+        fetch(`/scheduling/booking/${currentBookingId}/complete_booking_workflow_prompt/`, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
             .then(response => {
                 if (response.ok) {
                     // If we get a successful response, it means there's a workflow prompt

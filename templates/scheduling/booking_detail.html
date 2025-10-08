@@ -542,7 +542,11 @@ document.getElementById('completeForm').addEventListener('submit', function(e) {
     const bookingUuid = '{{ booking.uuid }}';
     
     // First check if there's a workflow prompt needed
-    fetch(`/services/scheduling/bookings/${bookingUuid}/complete-workflow/`)
+    fetch(`/services/scheduling/bookings/${bookingUuid}/complete-workflow/`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
         .then(response => response.json())
         .then(data => {
             if (data.prompt_required) {

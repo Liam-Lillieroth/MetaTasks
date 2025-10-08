@@ -762,74 +762,63 @@ def project_detail(request, pk):
 
 @login_required
 @require_organization_access
+@require_organization_access
 def complete_booking_workflow_prompt(request, booking_uuid):
-    """Prompt user for workflow action when completing a booking linked to a work item"""
-    profile = get_user_profile(request)
-    if not profile:
-        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'error': 'User profile not found'}, status=400)
-        else:
-            messages.error(request, 'User profile not found')
-            return redirect('scheduling:index')
+    """Handle both displaying and processing the workflow completion form."""
+    booking = get_object_or_404(BookingRequest, uuid=booking_uuid)
     
-    booking = get_object_or_404(
-        BookingRequest, 
-        uuid=booking_uuid, 
-        organization=profile.organization
-    )
-    
-    # Check if this booking should prompt for workflow update
-    if not BookingWorkflowIntegration.should_prompt_workflow_update(booking):
-        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'prompt_required': False})
-        else:
-            # No workflow prompt needed, redirect to simple completion
-            return redirect('scheduling:complete_booking', booking_uuid=booking_uuid)
-    
-    # Get completion options
+    # Check if workflow integration is available
     work_item = BookingWorkflowIntegration.get_linked_work_item(booking)
-    completion_options = BookingWorkflowIntegration.get_completion_options(work_item)
+    if not work_item:
+        messages.error(request, "No workflow integration found for this booking.")
+        return redirect('scheduling:booking_detail', uuid=booking.uuid)
     
     if request.method == 'POST':
-        # Handle the workflow completion
+        # Handle workflow completion form submission
+        profile = get_user_profile(request)
+        if not profile:
+            return JsonResponse({'error': 'User profile not found'}, status=400)
+        
         workflow_action = request.POST.get('workflow_action', 'no_change')
         target_step_id = request.POST.get('target_step_id')
         completion_notes = request.POST.get('completion_notes', '')
-        mark_complete = request.POST.get('mark_work_item_complete') == 'true'
+        mark_work_item_complete = request.POST.get('mark_work_item_complete') == 'on'
         
-        # Convert target_step_id to int if provided
-        if target_step_id:
-            try:
-                target_step_id = int(target_step_id)
-            except (ValueError, TypeError):
-                target_step_id = None
-        
-        # Complete the booking with workflow update
+        # Complete booking with workflow update
         result = BookingWorkflowIntegration.complete_booking_with_workflow_update(
             booking=booking,
             completed_by=profile,
             workflow_action=workflow_action,
-            target_step_id=target_step_id,
+            target_step_id=int(target_step_id) if target_step_id else None,
             completion_notes=completion_notes,
-            mark_work_item_complete=mark_complete
+            mark_work_item_complete=mark_work_item_complete
         )
         
-        if result['success']:
-            for message in result['messages']:
-                messages.success(request, message)
-        else:
-            messages.error(request, result.get('error', 'An error occurred'))
-        
-        # Check if this is an AJAX request
         if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse(result)
         else:
-            # Regular form submission - redirect to booking detail page
-            return redirect('scheduling:booking_detail', booking_id=booking.id)
+            # Add messages and redirect
+            if result.get('success'):
+                for message in result.get('messages', []):
+                    messages.success(request, message)
+                return redirect('scheduling:booking_list')
+            else:
+                messages.error(request, result.get('error', 'Unknown error occurred'))
+                return redirect('scheduling:booking_detail', uuid=booking.uuid)
     
-    # GET request - check if AJAX or regular request
+    # GET request - display the form
+    completion_options = BookingWorkflowIntegration.get_completion_options(work_item)
+    
     if request.headers.get('Content-Type') == 'application/json' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         # Return prompt data for AJAX requests
+        # Extract serializable data from completion_options
+        serializable_options = {
+            'next_steps': completion_options.get('next_steps', []),
+            'backward_steps': completion_options.get('backward_steps', []),
+            'can_complete': completion_options.get('can_complete', False),
+            'requires_booking': completion_options.get('requires_booking', False)
+        }
+        
         return JsonResponse({
             'prompt_required': True,
             'booking': {
@@ -841,21 +830,19 @@ def complete_booking_workflow_prompt(request, booking_uuid):
             'work_item': {
                 'uuid': str(work_item.uuid),
                 'title': work_item.title,
-                'current_step': work_item.current_step.name,
-                'workflow_name': work_item.workflow.name,
-            } if work_item else None,
-            'completion_options': completion_options
+                'current_step': work_item.current_step.name if work_item.current_step else None,
+            },
+            'completion_options': serializable_options
         })
-    else:
-        # Regular GET request - render the template
-        context = {
-            'profile': profile,
-            'booking': booking,
-            'work_item': work_item,
-            'completion_options': completion_options,
-            'page_title': f'Complete Booking: {booking.title}',
-        }
-        return render(request, 'scheduling/complete_booking_workflow.html', context)
+    
+    # Regular HTML request - render the form template
+    context = {
+        'booking': booking,
+        'work_item': work_item,
+        'completion_options': completion_options,
+    }
+    
+    return render(request, 'scheduling/complete_booking_workflow.html', context)
 
 
 @login_required
