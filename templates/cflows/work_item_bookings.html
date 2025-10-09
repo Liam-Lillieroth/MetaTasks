@@ -233,7 +233,18 @@
             {% else %}
                 <div class="p-6 text-center text-gray-500">
                     <i class="fas fa-calendar-times text-3xl mb-4"></i>
-                    <p class="text-sm">No CFlows bookings found for this work item.</p>
+                    {% if total_bookings > 0 %}
+                        <p class="text-sm mb-2">
+                            This work item has {{ total_bookings }} booking{{ total_bookings|pluralize }}, 
+                            but they were made by teams you don't have access to.
+                        </p>
+                        <p class="text-xs text-gray-400 mb-4">
+                            You are currently a member of {{ user_teams_count }} team{{ user_teams_count|pluralize }}.
+                            Contact your administrator if you need access to additional teams' bookings.
+                        </p>
+                    {% else %}
+                        <p class="text-sm mb-4">No CFlows bookings found for this work item.</p>
+                    {% endif %}
                     <a href="{% url 'cflows:create_booking_from_work_item' work_item.id %}?type=cflows" 
                        class="inline-flex items-center mt-3 text-blue-600 hover:text-blue-800 text-sm">
                         <i class="fas fa-plus mr-1"></i>Create CFlows Booking

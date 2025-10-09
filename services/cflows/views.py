@@ -865,12 +865,20 @@ def team_bookings_list(request):
     # Get user's teams
     user_teams = profile.teams.filter(is_active=True)
     
+    # Check if user has any teams
+    if not user_teams.exists():
+        messages.warning(request, 
+            "You are not a member of any teams. Please contact your administrator to be added to teams to view bookings.")
+    
     # Base queryset - bookings for user's teams
     bookings = TeamBooking.objects.filter(
         team__in=user_teams
     ).select_related(
         'team', 'work_item', 'job_type', 'booked_by', 'completed_by'
     )
+    
+    # Store original count for messaging
+    total_team_bookings = bookings.count()
     
     # Filtering
     team_id = request.GET.get('team')
@@ -895,6 +903,26 @@ def team_bookings_list(request):
         bookings = bookings.filter(end_time__lte=date_to)
     
     bookings = bookings.order_by('-start_time')
+    
+    # Add helpful messaging for empty results
+    if total_team_bookings == 0 and user_teams.exists():
+        messages.info(request, 
+            "No bookings found for your teams. Your teams may not have any bookings scheduled yet.")
+    elif bookings.count() == 0 and total_team_bookings > 0:
+        filter_msg = []
+        if status_filter:
+            filter_msg.append(f"status '{status_filter}'")
+        if team_id:
+            team_name = user_teams.filter(id=team_id).first()
+            if team_name:
+                filter_msg.append(f"team '{team_name.name}'")
+        if date_from or date_to:
+            filter_msg.append("date range")
+        
+        if filter_msg:
+            messages.info(request, 
+                f"No bookings found matching your filters ({', '.join(filter_msg)}). "
+                f"Try adjusting your filters or select 'All Statuses' to see all {total_team_bookings} available bookings.")
     
     # Pagination
     paginator = Paginator(bookings, 25)
@@ -1843,8 +1871,18 @@ def work_item_bookings_status(request, work_item_id):
         workflow__organization=profile.organization
     )
     
-    # Get CFlows bookings
-    cflows_bookings = TeamBooking.objects.filter(work_item=work_item).select_related('team')
+    # Get user's teams for filtering
+    user_teams = profile.teams.filter(is_active=True)
+    
+    # Get CFlows bookings - only for teams the user is a member of
+    cflows_bookings = TeamBooking.objects.filter(
+        work_item=work_item,
+        team__in=user_teams
+    ).select_related('team')
+    
+    # Count total bookings for this work item (for debugging/messaging)
+    total_cflows_bookings = TeamBooking.objects.filter(work_item=work_item).count()
+    
     cflows_data = []
     for booking in cflows_bookings:
         cflows_data.append({
@@ -1891,7 +1929,11 @@ def work_item_bookings_status(request, work_item_id):
         'cflows_bookings': cflows_data,
         'scheduling_bookings': scheduling_data,
         'total_bookings': len(cflows_data) + len(scheduling_data),
-        'has_bookings': bool(cflows_data or scheduling_data)
+        'has_bookings': bool(cflows_data or scheduling_data),
+        'user_teams_count': user_teams.count(),
+        'total_cflows_bookings': total_cflows_bookings,
+        'visible_cflows_bookings': len(cflows_data),
+        'hidden_cflows_bookings': total_cflows_bookings - len(cflows_data)
     })
 
 
@@ -1962,8 +2004,17 @@ def view_work_item_bookings(request, work_item_id):
         workflow__organization=profile.organization
     )
     
-    # Get CFlows bookings
-    cflows_bookings = TeamBooking.objects.filter(work_item=work_item).select_related('team')
+    # Get user's teams for filtering
+    user_teams = profile.teams.filter(is_active=True)
+    
+    # Get CFlows bookings - only for teams the user is a member of
+    cflows_bookings = TeamBooking.objects.filter(
+        work_item=work_item,
+        team__in=user_teams
+    ).select_related('team', 'booked_by', 'completed_by')
+    
+    # Count total bookings for this work item (for messaging)
+    total_bookings = TeamBooking.objects.filter(work_item=work_item).count()
     
     # Get Scheduling service bookings
     scheduling_bookings = []
@@ -1978,12 +2029,27 @@ def view_work_item_bookings(request, work_item_id):
     except ImportError:
         pass  # Scheduling service not available
     
+    # Add messaging for empty results
+    from django.contrib import messages
+    if not user_teams.exists():
+        messages.warning(request, 
+            "You are not a member of any teams. Contact your administrator to be added to teams to view bookings.")
+    elif total_bookings > 0 and not cflows_bookings.exists():
+        messages.info(request, 
+            f"This work item has {total_bookings} booking(s), but they were made by teams you don't have access to. "
+            f"Contact your administrator if you need access to these bookings.")
+    elif not cflows_bookings.exists() and not scheduling_bookings:
+        messages.info(request, "No bookings found for this work item.")
+    
     context = {
         'profile': profile,
         'work_item': work_item,
         'cflows_bookings': cflows_bookings,
         'scheduling_bookings': scheduling_bookings,
-        'title': f'Bookings for {work_item.title}'
+        'title': f'Bookings for {work_item.title}',
+        'user_teams_count': user_teams.count(),
+        'total_bookings': total_bookings,
+        'visible_bookings': cflows_bookings.count(),
     }
     
     return render(request, 'cflows/work_item_bookings.html', context)

@@ -576,6 +576,33 @@ class Team(models.Model):
             path.insert(0, current)
             current = current.parent_team
         return path
+    
+    def has_active_bookings(self):
+        """Check if this team has any bookings (active or completed)"""
+        try:
+            from services.cflows.models import TeamBooking
+            return TeamBooking.objects.filter(team=self).exists()
+        except ImportError:
+            # CFlows service might not be available
+            return False
+    
+    def can_remove_member(self, member):
+        """Check if a member can be safely removed from the team"""
+        if not self.has_active_bookings():
+            return True, "No bookings associated with this team"
+        
+        # Check if removing this member would leave the team empty
+        remaining_members = self.members.exclude(id=member.id).filter(is_active=True)
+        if not remaining_members.exists():
+            return False, "Cannot remove last active member from team with bookings"
+        
+        return True, "Member can be safely removed"
+    
+    def delete(self, *args, **kwargs):
+        """Override delete to prevent deletion of teams with bookings"""
+        if self.has_active_bookings():
+            raise ValueError(f"Cannot delete team '{self.name}' because it has associated bookings")
+        return super().delete(*args, **kwargs)
 
 
 class JobType(models.Model):

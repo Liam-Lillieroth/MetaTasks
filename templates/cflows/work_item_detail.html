@@ -699,24 +699,70 @@
 <script>
 // Load booking status for this work item
 async function loadBookingStatus() {
+    console.log('loadBookingStatus called'); // Debug log
+    
     try {
         const response = await fetch(`{% url 'cflows:work_item_bookings_status' work_item.id %}`, {
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
             }
         });
+        
+        console.log('Response status:', response.status); // Debug log
+        
         const data = await response.json();
+        
+        console.log('Booking status data:', data); // Debug logging
+        
+        // Test: always show something to verify the function is working
+        const container = document.getElementById('booking-status-container');
+        container.innerHTML = `
+            <div class="p-4 bg-yellow-50 border border-yellow-300 rounded">
+                <p class="text-sm text-yellow-800">
+                    DEBUG: loadBookingStatus called. Found ${data.visible_cflows_bookings} visible bookings, 
+                    ${data.hidden_cflows_bookings} hidden bookings.
+                </p>
+            </div>
+        `;
+        
         // Determine if there are any incomplete bookings (CFlows or Scheduling)
         const hasIncomplete = (data.cflows_bookings || []).some(b => !b.is_completed)
             || (data.scheduling_bookings || []).some(b => (b.status || '').toLowerCase() !== 'completed');
 
-        if (hasIncomplete) {
+        // Check if there are hidden bookings
+        const hasHiddenBookings = data.hidden_cflows_bookings > 0;
+        
+        // Check if there are any bookings at all (CFlows or Scheduling)
+        const hasAnyBookings = (data.cflows_bookings || []).length > 0 || (data.scheduling_bookings || []).length > 0;
+
+        console.log('hasIncomplete:', hasIncomplete, 'hasHiddenBookings:', hasHiddenBookings, 'hasAnyBookings:', hasAnyBookings); // Debug log
+
+        if (hasIncomplete || hasHiddenBookings) {
+            console.log('Displaying booking status');
             displayBookingStatus(data);
+        } else if (hasAnyBookings) {
+            // All visible bookings are completed - show completion status
+            console.log('Displaying completed booking status');
+            displayCompletedBookingStatus(data);
+        } else if (data.total_cflows_bookings > data.visible_cflows_bookings) {
+            // There are bookings but user can't see them
+            console.log('Has hidden bookings only');
+            displayHiddenBookingsMessage(data);
         } else {
+            console.log('No bookings to display - hiding status');
             hideBookingStatus();
         }
     } catch (error) {
         console.error('Error loading booking status:', error);
+        // Show error in UI for debugging
+        const container = document.getElementById('booking-status-container');
+        container.innerHTML = `
+            <div class="p-4 bg-red-50 border border-red-300 rounded">
+                <p class="text-sm text-red-800">
+                    Error loading booking status: ${error.message}
+                </p>
+            </div>
+        `;
     }
 }
 
@@ -726,8 +772,10 @@ function displayBookingStatus(data) {
     const cflowsIncomplete = (data.cflows_bookings || []).filter(b => !b.is_completed);
     const schedulingIncomplete = (data.scheduling_bookings || []).filter(b => (b.status || '').toLowerCase() !== 'completed');
     const totalIncomplete = cflowsIncomplete.length + schedulingIncomplete.length;
+    const hasHiddenBookings = data.hidden_cflows_bookings > 0;
 
-    if (totalIncomplete === 0) {
+    // Show message even if no incomplete bookings are visible, but there are hidden ones
+    if (totalIncomplete === 0 && !hasHiddenBookings) {
         container.innerHTML = '';
         return;
     }
@@ -738,10 +786,25 @@ function displayBookingStatus(data) {
                 <i class="fas fa-calendar-alt text-xl"></i>
             </div>
             <div class="flex-1">
+    `;
+    
+    if (totalIncomplete > 0) {
+        html += `
                 <p class="text-sm font-medium text-blue-800 mb-2">
                     This work item has ${totalIncomplete} incomplete booking${totalIncomplete !== 1 ? 's' : ''}
                 </p>
-    `;
+        `;
+    }
+    
+    // Show message about hidden bookings
+    if (hasHiddenBookings) {
+        html += `
+                <p class="text-xs text-blue-700 mb-2">
+                    ${data.hidden_cflows_bookings} additional booking${data.hidden_cflows_bookings !== 1 ? 's' : ''} 
+                    from teams you don't have access to ${totalIncomplete > 0 ? 'are' : 'is'} hidden.
+                </p>
+        `;
+    }
     
     // CFlows bookings
     if (cflowsIncomplete.length > 0) {
@@ -847,9 +910,109 @@ function displayBookingStatus(data) {
     container.innerHTML = html;
 }
 
+function displayCompletedBookingStatus(data) {
+    const container = document.getElementById('booking-status-container');
+    const cflowsCompleted = (data.cflows_bookings || []).filter(b => b.is_completed);
+    const schedulingCompleted = (data.scheduling_bookings || []).filter(b => (b.status || '').toLowerCase() === 'completed');
+    const totalCompleted = cflowsCompleted.length + schedulingCompleted.length;
+    const hasHiddenBookings = data.hidden_cflows_bookings > 0;
+    
+    if (totalCompleted === 0 && !hasHiddenBookings) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = `
+        <div class="flex items-start p-4 rounded-lg border border-green-300 bg-green-50">
+            <div class="flex-shrink-0 mr-3 text-green-600">
+                <i class="fas fa-check-circle text-xl"></i>
+            </div>
+            <div class="flex-1">
+                <p class="text-sm font-medium text-green-800 mb-2">
+                    ${totalCompleted > 0 ? `All ${totalCompleted} booking${totalCompleted !== 1 ? 's' : ''} completed` : 'No active bookings visible'}
+                </p>
+                
+                ${schedulingCompleted.length > 0 ? `
+                    <div class="text-xs text-green-700 mb-1">
+                        <strong>Scheduling:</strong> ${schedulingCompleted.map(b => `${b.title} (${b.resource})`).join(', ')}
+                    </div>
+                ` : ''}
+                
+                ${cflowsCompleted.length > 0 ? `
+                    <div class="text-xs text-green-700 mb-1">
+                        <strong>CFlows:</strong> ${cflowsCompleted.map(b => b.title).join(', ')}
+                    </div>
+                ` : ''}
+    `;
+    
+    if (hasHiddenBookings) {
+        html += `
+                <p class="text-xs text-green-700 mb-2">
+                    ${data.hidden_cflows_bookings} additional booking${data.hidden_cflows_bookings !== 1 ? 's' : ''} 
+                    from teams you don't have access to ${totalCompleted > 0 ? 'may also exist' : 'exist but are hidden'}.
+                </p>
+        `;
+    }
+    
+    if (totalCompleted > 0) {
+        html += `
+                <a href="/services/cflows/work-items/{{ work_item.id }}/bookings/" 
+                   class="text-xs text-green-700 hover:text-green-900 underline">
+                    View all booking details
+                </a>
+        `;
+    }
+    
+    html += `
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+function displayHiddenBookingsMessage(data) {
+    const container = document.getElementById('booking-status-container');
+    const hiddenCount = data.total_cflows_bookings - data.visible_cflows_bookings;
+    
+    let html = `
+        <div class="flex items-start p-4 rounded-lg border border-orange-300 bg-orange-50">
+            <div class="flex-shrink-0 mr-3 text-orange-600">
+                <i class="fas fa-eye-slash text-xl"></i>
+            </div>
+            <div class="flex-1">
+                <p class="text-sm font-medium text-orange-800 mb-2">
+                    This work item has ${data.total_cflows_bookings} booking${data.total_cflows_bookings !== 1 ? 's' : ''}, 
+                    but they were made by teams you don't have access to.
+                </p>
+                <p class="text-xs text-orange-700 mb-2">
+                    You are currently a member of ${data.user_teams_count} team${data.user_teams_count !== 1 ? 's' : ''}.
+                    Contact your administrator if you need access to these bookings.
+                </p>
+                <a href="{% url 'cflows:view_work_item_bookings' work_item.id %}" 
+                   class="text-xs text-orange-700 hover:text-orange-900 underline">
+                    Try the detailed bookings view
+                </a>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
 function hideBookingStatus() {
     const container = document.getElementById('booking-status-container');
-    container.innerHTML = '';
+    // Instead of completely hiding, show a helpful message
+    container.innerHTML = `
+        <div class="p-3 bg-gray-50 border border-gray-200 rounded text-center">
+            <p class="text-sm text-gray-600">
+                <i class="fas fa-info-circle mr-2"></i>
+                No bookings found for this work item. 
+                <a href="#" onclick="console.log('Container found:', document.getElementById('booking-status-container')); return false;" 
+                   class="text-blue-600 hover:text-blue-800">Debug info logged to console</a>
+            </p>
+        </div>
+    `;
 }
 
 // Load booking status when page loads if we just created a booking

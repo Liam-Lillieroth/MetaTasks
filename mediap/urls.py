@@ -21,6 +21,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('admin/custom/', include('admin.urls')),  # Custom admin views
     path('api/', include('api.urls')),
     path('dashboard/', include(('core.dashboard_urls', 'dashboard'), namespace='dashboard')),  # Dashboard URLs
     path('', include('homepage.urls')),

@@ -46,10 +46,11 @@ class UserProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Team)
 class TeamAdmin(admin.ModelAdmin):
-    list_display = ['name', 'organization', 'member_count', 'is_active']
+    list_display = ['name', 'organization', 'member_count', 'has_bookings_indicator', 'is_active']
     list_filter = ['organization', 'is_active']
     search_fields = ['name', 'description']
     filter_horizontal = ['members']
+    actions = ['check_team_integrity', 'add_org_admin_to_empty_teams']
     
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -59,6 +60,58 @@ class TeamAdmin(admin.ModelAdmin):
         return obj.members_count if hasattr(obj, 'members_count') else obj.member_count
     member_count.short_description = 'Members'
     member_count.admin_order_field = 'members_count'
+    
+    def has_bookings_indicator(self, obj):
+        has_bookings = obj.has_active_bookings()
+        member_count = obj.members.filter(is_active=True).count()
+        
+        if has_bookings and member_count == 0:
+            return format_html('<span style="color: red; font-weight: bold;">⚠️ Has bookings but no members!</span>')
+        elif has_bookings:
+            return format_html('<span style="color: green;">✓ Has bookings</span>')
+        else:
+            return format_html('<span style="color: gray;">No bookings</span>')
+    has_bookings_indicator.short_description = 'Booking Status'
+    
+    def check_team_integrity(self, request, queryset):
+        """Check selected teams for integrity issues"""
+        issues = []
+        for team in queryset:
+            if team.has_active_bookings():
+                member_count = team.members.filter(is_active=True).count()
+                if member_count == 0:
+                    issues.append(f"Team '{team.name}' has bookings but no active members")
+        
+        if issues:
+            self.message_user(request, f"Found {len(issues)} integrity issues:\n" + "\n".join(issues), level='WARNING')
+        else:
+            self.message_user(request, "No integrity issues found in selected teams", level='SUCCESS')
+    
+    check_team_integrity.short_description = "Check selected teams for integrity issues"
+    
+    def add_org_admin_to_empty_teams(self, request, queryset):
+        """Add organization admin to teams that have bookings but no members"""
+        fixed_count = 0
+        for team in queryset:
+            if team.has_active_bookings():
+                member_count = team.members.filter(is_active=True).count()
+                if member_count == 0:
+                    # Find organization admin
+                    org_admins = team.organization.members.filter(
+                        is_organization_admin=True,
+                        is_active=True
+                    )
+                    if org_admins.exists():
+                        admin = org_admins.first()
+                        team.members.add(admin)
+                        fixed_count += 1
+        
+        if fixed_count > 0:
+            self.message_user(request, f"Added organization admin to {fixed_count} teams", level='SUCCESS')
+        else:
+            self.message_user(request, "No teams needed fixing", level='INFO')
+    
+    add_org_admin_to_empty_teams.short_description = "Add org admin to teams with bookings but no members"
 
 
 @admin.register(JobType)
